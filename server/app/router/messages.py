@@ -11,7 +11,6 @@ from ..schemas import (
     MessageData,
     Message,
     Conversation,
-    PyObjectId,
     Message_Status,
 )
 from ..utils import get_user_form_conversation
@@ -74,20 +73,21 @@ async def handle_recieved_message(user_id: ObjectId, data: MessageData):
             )
 
         # check if conversations between the user exist
-        conv_response = await ConversationCollection.find_one(
+        conversation = await ConversationCollection.find_one(
             {"participants": {"$all": [user_id, ObjectId(data.reciever_id)]}}
         )
 
-        conversation = conv_response["_id"]
+        if conversation:
+            # add the conversation id to the message data
+            data.conversation_id = conversation["_id"]
 
-        if not conversation:
+        else:
             # create a new conversation document
             conv_data = Conversation(participants=[user_id, ObjectId(data.reciever_id)])
-            conversation = await ConversationCollection.insert_one(
+            conversation_resp = await ConversationCollection.insert_one(
                 conv_data.model_dump(exclude=["id"])
             )
-
-        data.conversation_id = conversation
+            data.conversation_id = conversation_resp
 
     # create a Message instance
     message_data = Message(
