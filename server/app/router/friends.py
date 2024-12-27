@@ -214,7 +214,7 @@ async def retrive_conversation(
 @router.get("/list-conversations")
 async def list_conversations(
     user: UserOut = Depends(get_user_from_access_token),
-    after: Optional[str] = Query(
+    after: Optional[datetime] = Query(
         None, description="conversation which have message after this date"
     ),
 ):
