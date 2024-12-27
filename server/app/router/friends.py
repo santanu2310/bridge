@@ -52,6 +52,22 @@ async def make_friend_request(
             detail="cannot make request to this username",
         )
 
+    # Check if they are already friends
+    if FriendCollection.find_one(
+        {"user_id": user.id, "friends_id": requested_user["_id"]}
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="You are already friends"
+        )
+
+    # Check if the friend request already exist
+    if FriendRequestCollection.find_one(
+        {"sender_id": user.id, "reciever_id": requested_user["_id"]}
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Friend request already exist"
+        )
+
     # Creating a friend request
     request = FriendRequestDB(
         sender_id=ObjectId(user.id),
@@ -127,7 +143,7 @@ async def list_friends(user: UserOut = Depends(get_user_from_access_token)):
 
 
 @router.get("/get-conversation")
-async def retrive_messages(
+async def retrive_conversation(
     user: UserOut = Depends(get_user_from_access_token),
     conversation_id: Optional[str] = Query(
         None, description="conversation id who's conversation is to retrive"
@@ -187,5 +203,58 @@ async def retrive_messages(
 
         return conversation
 
+    except HTTPException as http_exc:
+        raise http_exc
+
     except Exception as e:
+        print(e)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@router.get("/list-conversations")
+async def list_conversations(
+    user: UserOut = Depends(get_user_from_access_token),
+    after: Optional[str] = Query(
+        None, description="conversation which have message after this date"
+    ),
+):
+    if not after:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="'after' is a required query parameter",
+        )
+
+    pipeline = [
+        {
+            "$match": {
+                "last_message_date": {"$gt": after},
+                "participants": {"$all": [user.id]},
+            }
+        },
+        {
+            "$lookup": {
+                "from": "message",
+                "localField": "_id",
+                "foreignField": "conversation_id",
+                "as": "messages",
+            }
+        },
+    ]
+
+    try:
+        cursor = ConversationCollection.aggregate(pipeline)
+        response = await cursor.to_list(length=None)
+
+        # Map to pydentic model
+        conversations = [
+            ConversationResponse(**conversation) for conversation in response
+        ]
+
+        return conversations
+
+    except Exception as e:
+        print(e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="error fetching users list",
+        )
