@@ -5,6 +5,9 @@ import axios from "axios";
 import { indexedDbService } from "@/services/indexDbServices";
 import { mapResponseToUser, type User } from "@/types/User";
 import { useMessageStore } from "./message";
+import type { Conversation } from "@/types/Conversation";
+// import type { Message } from "@/types/Message";
+import { mapResponseToMessage, type Message } from "@/types/Message";
 
 export const useFriendStore = defineStore("friend", () => {
 	const friends = reactive<User[]>([]);
@@ -13,11 +16,13 @@ export const useFriendStore = defineStore("friend", () => {
 
 	async function listFriend() {
 		try {
-			const result: { newlyCreated: boolean; friends: User[] } =
+			const result: { newlyCreated: boolean; objects: User[] } =
 				(await indexedDbService.getAllRecords("friends")) as {
 					newlyCreated: boolean;
-					friends: User[];
+					objects: User[];
 				};
+
+			console.log(result);
 
 			if (result.newlyCreated) {
 				const response = await axios({
@@ -38,9 +43,10 @@ export const useFriendStore = defineStore("friend", () => {
 						friends.length,
 						...response.data.map(mapResponseToUser)
 					);
+					console.log(friends);
 					return;
 				}
-			} else friends.splice(0, friends.length, ...result.friends);
+			} else friends.splice(0, friends.length, ...result.objects);
 
 			friends.sort((a, b) => {
 				const aName = a.fullName || "";
@@ -50,22 +56,69 @@ export const useFriendStore = defineStore("friend", () => {
 		} catch (error) {}
 	}
 
-	async function getConversations(userId: string) {
-		//check in the conversation variable
-
+	async function getConversation(userId: string): Promise<Message[] | null> {
 		//checking in local database
-		const conversation = await indexedDbService.getRecord(
+		const conversation: Conversation = (await indexedDbService.getRecord(
 			"conversation",
 			null,
 			{ participant: userId }
-		);
+		)) as Conversation;
 
-		//retrive from server
+		// If conversation in local database
+		if (conversation) {
+			if (
+				messageStore.currentConversation?.recieverId ==
+				conversation.participant
+			) {
+				messageStore.currentConversation!.convId = conversation.id;
+			}
 
-		console.log(conversation);
+			const request = indexedDbService.getAllRecords("message", {
+				conversationId: conversation.id as string,
+			});
+
+			const oldMessages = (await request).objects as Message[];
+			return oldMessages;
+		} else {
+			//retrive from server
+			const response = await axios({
+				method: "get",
+				url: `http://localhost:8000/friends/get-conversation?friend_id=${userId}`,
+				withCredentials: true,
+			});
+
+			if (response.status == 200) {
+				const convResponse: Conversation = {
+					id: response.data.id,
+					participant: response.data.participant,
+					unseenMessageIds: response.data.unseen_message_ids,
+					startDate: response.data.start_date,
+					lastMessageDate: response.data.last_message_date,
+				};
+
+				//Add the conversation to indesedDb and to local variable
+				await indexedDbService.addRecord("conversation", convResponse);
+				if (
+					messageStore.currentConversation?.recieverId ==
+					convResponse.participant
+				) {
+					messageStore.currentConversation!.convId = convResponse.id;
+				}
+
+				//add the messages to the indesedDb
+				const oldMessages = response.data.messages.map((msg: object) =>
+					mapResponseToMessage(msg)
+				);
+				indexedDbService.batchInsert("message", oldMessages);
+
+				return oldMessages;
+			}
+
+			return null;
+		}
 	}
 
 	listFriend();
 
-	return { friends, getConversations };
+	return { friends, getConversation, listFriend };
 });
