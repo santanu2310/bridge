@@ -111,7 +111,6 @@ export const useSyncStore = defineStore("background_sync", () => {
 						conv.last_message_date;
 				})
 			);
-			console.log(messageStore.conversations);
 		}
 	}
 
