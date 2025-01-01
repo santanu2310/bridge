@@ -174,35 +174,67 @@ class IndexedDbService {
 	}
 
 	async getAllRecords(
-		storeName: string
-	): Promise<{ newlyCreated: boolean; friends: object[] | User[] }> {
+		storeName: string,
+		index?: { [key: string]: string }
+	): Promise<{ newlyCreated: boolean; objects: object[] }> {
 		if (!this.db) {
 			await this.openDb();
 		}
 
 		return new Promise<{
 			newlyCreated: boolean;
-			friends: object[] | User[];
+			objects: object[];
 		}>((resolve, rejects) => {
 			if (!this.db) {
 				rejects(new Error("Database is not open."));
 				return;
 			}
 
+			//open a transaction in indesedDb
 			const transaction = this.db.transaction(storeName, "readonly");
 			const store = transaction.objectStore(storeName);
-			const request = store.getAll();
 
-			request.onsuccess = () => {
-				resolve({
-					newlyCreated: this.newlyCreated,
-					friends: request.result,
-				});
-			};
+			if (index) {
+				//retrive an index object and search for the given value
+				const storeIndexes = store.index(Object.keys(index)[0]);
+				const request = storeIndexes.openCursor(
+					IDBKeyRange.only(index[Object.keys(index)[0]])
+				);
 
-			request.onerror = () => {
-				rejects(request.error);
-			};
+				const results: object[] = [];
+
+				request.onsuccess = (event) => {
+					// store the result of current cursor, store in relusts and push the cursor forwored
+					const cursor = (event.target as IDBRequest).result;
+
+					if (cursor) {
+						results.push(cursor.value);
+						cursor.continue();
+					} else {
+						resolve({
+							newlyCreated: this.newlyCreated,
+							objects: results,
+						});
+					}
+				};
+				request.onerror = () => {
+					rejects(request.error);
+				};
+			} else {
+				// get all the objects and return the value
+				const request = store.getAll();
+
+				request.onsuccess = () => {
+					resolve({
+						newlyCreated: this.newlyCreated,
+						objects: request.result,
+					});
+				};
+
+				request.onerror = () => {
+					rejects(request.error);
+				};
+			}
 		});
 	}
 
@@ -231,6 +263,54 @@ class IndexedDbService {
 
 			request.onerror = () => {
 				rejects(request.error);
+			};
+		});
+	}
+
+	async batchInsert(storeName: string, data: object[]): Promise<IDBValidKey> {
+		if (!this.db) {
+			await this.openDb();
+		}
+
+		return new Promise<IDBValidKey>((resolve, rejects) => {
+			if (!this.db) {
+				rejects(new Error("Database is not open."));
+				return;
+			}
+
+			const transaction = this.db.transaction(storeName, "readwrite");
+			const store = transaction.objectStore(storeName);
+
+			const result: IDBValidKey[] = [];
+			let errorOccurred = false;
+
+			data.forEach((record) => {
+				const request = store.add(record);
+
+				request.onsuccess = (event: Event) => {
+					const key = (event.target as IDBRequest).result;
+					result.push(key);
+				};
+
+				request.onerror = (event: Event) => {
+					console.error(
+						"Failed to insert record:",
+						(event.target as IDBRequest).error
+					);
+					errorOccurred = true;
+				};
+			});
+
+			transaction.oncomplete = () => {
+				if (errorOccurred) {
+					rejects(new Error("Some records failed to insert."));
+				} else {
+					resolve(result);
+				}
+			};
+
+			transaction.onerror = () => {
+				rejects(result);
 			};
 		});
 	}
