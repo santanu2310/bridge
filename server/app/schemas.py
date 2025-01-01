@@ -98,7 +98,9 @@ class FriendRequestOut(BaseModel):
 
 
 class Conversation(BaseModel):
-    id: Optional[PyObjectId] = Field(alias="_id", default=None)
+    id: Optional[PyObjectId] = Field(
+        alias="_id", default=None, serialization_alias="id"
+    )
     participants: List[PyObjectId]
     unseen_message_ids: List[PyObjectId] = []
     start_date: datetime = Field(default_factory=datetime.now)
@@ -106,7 +108,9 @@ class Conversation(BaseModel):
 
 
 class Message(BaseModel):
-    id: Optional[PyObjectId] = Field(alias="_id", default=None)
+    id: Optional[PyObjectId] = Field(
+        alias="_id", default=None, serialization_alias="id"
+    )
     temp_id: str | None = None  # exclued this while inserting to database
     conversation_id: PyObjectId
     sender_id: PyObjectId
