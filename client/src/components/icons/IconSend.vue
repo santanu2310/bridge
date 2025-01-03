@@ -1,12 +1,8 @@
 <script setup lang="ts">
-	withDefaults(
-		defineProps<{
-			size: number;
-		}>(),
-		{
-			size: 50,
-		}
-	);
+	interface Props {
+		size?: number;
+	}
+	const { size = 60 } = defineProps<Props>();
 </script>
 
 <template>

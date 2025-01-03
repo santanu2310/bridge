@@ -1,14 +1,9 @@
 <script setup lang="ts">
-	withDefaults(
-		defineProps<{
-			size: number;
-			rotate: number;
-		}>(),
-		{
-			size: 50,
-			rotate: 0,
-		}
-	);
+	interface Props {
+		size?: number;
+		rotate?: number;
+	}
+	const { size = 60, rotate = 0 } = defineProps<Props>();
 </script>
 
 <template>
