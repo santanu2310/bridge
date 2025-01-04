@@ -70,8 +70,8 @@ class Friends(BaseModel):
     id: Optional[PyObjectId] = Field(alias="_id", default=None)
     user_id: PyObjectId
     friends_id: PyObjectId
-    update_at: datetime = datetime.now()
-    created_at: datetime = datetime.now()
+    update_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime = Field(default_factory=datetime.now)
 
 
 class FriendRequestIn(BaseModel):
@@ -85,8 +85,8 @@ class FriendRequestDB(BaseModel):
     reciever_id: PyObjectId
     message: str | None = None
     status: Friends_Status = Friends_Status.pending
-    created_at: datetime = datetime.now()
-    updated_at: datetime = datetime.now()
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=datetime.now)
 
 
 class FriendRequestOut(BaseModel):
