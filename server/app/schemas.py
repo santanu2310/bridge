@@ -116,7 +116,7 @@ class Message(BaseModel):
     sender_id: PyObjectId
     reciever_id: Optional[PyObjectId] = None
     message: str
-    sending_time: datetime = datetime.now()
+    sending_time: datetime = Field(default_factory=datetime.now)
     status: Message_Status = Message_Status.send
 
 
