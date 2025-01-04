@@ -218,16 +218,10 @@ async def list_conversations(
         None, description="conversation which have message after this date"
     ),
 ):
-    if not after:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="'after' is a required query parameter",
-        )
 
     pipeline = [
         {
             "$match": {
-                "last_message_date": {"$gt": after},
                 "participants": {"$all": [user.id]},
             }
         },
@@ -240,6 +234,9 @@ async def list_conversations(
             }
         },
     ]
+
+    if after:
+        pipeline[0]["$match"]["last_message_date"] = {"$gt": after}
 
     try:
         cursor = ConversationCollection.aggregate(pipeline)
