@@ -10,8 +10,22 @@
 	const email = ref<string | null>();
 	const username = ref<string | null>();
 	const password = ref<string | null>();
+	const fullName = ref<string | null>();
+
+	const errorMsg = ref<string[]>([]);
 
 	async function register() {
+		errorMsg.value = [];
+		if (
+			!email.value ||
+			!username.value ||
+			!password.value ||
+			!fullName.value
+		) {
+			errorMsg.value.push("All fields are required !");
+
+			return;
+		}
 		try {
 			const response = await axios({
 				method: "post",
@@ -19,6 +33,7 @@
 				data: {
 					email: email.value,
 					username: username.value,
+					full_name: fullName.value,
 					password: password.value,
 				},
 			});
@@ -27,7 +42,11 @@
 				router.push({ name: "login" });
 			}
 		} catch (error) {
-			console.log(error);
+			console.error(error);
+			const axiosError = error as {
+				response: { data: { detail: string } };
+			};
+			errorMsg.value.push(axiosError.response.data.detail);
 		}
 	}
 </script>
@@ -75,11 +94,18 @@
 			<div
 				class="login-form max-w-80 w-full mb-20 flex flex-col items-center"
 			>
-				<div class="my-12 text-center">
+				<div class="mt-12 mb-4 text-center">
 					<b class="text-3xl font-medium">Register Account</b>
 					<p class="mt-1 text-base">
 						Get your free Bridge account now.
 					</p>
+					<div class="w-full h-fit flex mt-4 justify-center">
+						<span
+							v-for="msg in errorMsg"
+							class="text-red-500 text-sm font-medium"
+							>{{ msg }}</span
+						>
+					</div>
 				</div>
 				<form class="w-full" method="post" @submit.prevent="register()">
 					<div class="input-div">
@@ -104,6 +130,19 @@
 							class=""
 							v-model="username"
 							placeholder="Enter Username"
+							required
+						/>
+					</div>
+					<div class="input-div">
+						<label class="text-base font-medium" for="username"
+							>Display Name
+						</label>
+						<input
+							type="text"
+							id="username"
+							class=""
+							v-model="fullName"
+							placeholder="Enter Display Name"
 							required
 						/>
 					</div>
