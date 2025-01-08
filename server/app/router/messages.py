@@ -59,12 +59,12 @@ async def messages_socket(
 async def handle_recieved_message(user_id: ObjectId, data: MessageData):
     # when user start new conversation and don't have the conversation id
     if not data.conversation_id:
-        if not data.reciever_id:
+        if not data.receiver_id:
             raise WebSocketException(code=status.WS_1003_UNSUPPORTED_DATA)
 
         # check if the users are friend or not
         friend = await FriendCollection.find_one(
-            {"user_id": user_id, "friends_id": ObjectId(data.reciever_id)}
+            {"user_id": user_id, "friends_id": ObjectId(data.receiver_id)}
         )
 
         if not friend:
@@ -74,7 +74,7 @@ async def handle_recieved_message(user_id: ObjectId, data: MessageData):
 
         # check if conversations between the user exist
         conversation = await ConversationCollection.find_one(
-            {"participants": {"$all": [user_id, ObjectId(data.reciever_id)]}}
+            {"participants": {"$all": [user_id, ObjectId(data.receiver_id)]}}
         )
 
         if conversation:
@@ -83,7 +83,7 @@ async def handle_recieved_message(user_id: ObjectId, data: MessageData):
 
         else:
             # create a new conversation document
-            conv_data = Conversation(participants=[user_id, ObjectId(data.reciever_id)])
+            conv_data = Conversation(participants=[user_id, ObjectId(data.receiver_id)])
             conversation_resp = await ConversationCollection.insert_one(
                 conv_data.model_dump(exclude=["id"])
             )

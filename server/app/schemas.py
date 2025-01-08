@@ -82,7 +82,7 @@ class FriendRequestIn(BaseModel):
 class FriendRequestDB(BaseModel):
     id: Optional[PyObjectId] = Field(alias="_id", default=None)
     sender_id: PyObjectId
-    reciever_id: PyObjectId
+    receiver_id: PyObjectId
     message: str | None = None
     status: Friends_Status = Friends_Status.pending
     created_at: datetime = Field(default_factory=datetime.now)
@@ -114,7 +114,7 @@ class Message(BaseModel):
     temp_id: str | None = None  # exclued this while inserting to database
     conversation_id: PyObjectId
     sender_id: PyObjectId
-    reciever_id: Optional[PyObjectId] = None
+    receiver_id: Optional[PyObjectId] = None
     message: str
     sending_time: datetime = Field(default_factory=datetime.now)
     status: Message_Status = Message_Status.send
@@ -126,7 +126,7 @@ class ConversationResponse(Conversation):
 
 class MessageData(BaseModel):
     message: str
-    reciever_id: str | None
+    receiver_id: str | None
     conversation_id: str | None
     temp_id: str | None
 

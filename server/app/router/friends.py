@@ -62,7 +62,7 @@ async def make_friend_request(
 
     # Check if the friend request already exist
     if FriendRequestCollection.find_one(
-        {"sender_id": user.id, "reciever_id": requested_user["_id"]}
+        {"sender_id": user.id, "receiver_id": requested_user["_id"]}
     ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Friend request already exist"
@@ -71,7 +71,7 @@ async def make_friend_request(
     # Creating a friend request
     request = FriendRequestDB(
         sender_id=ObjectId(user.id),
-        reciever_id=requested_user["_id"],
+        receiver_id=requested_user["_id"],
         message=request_data.message,
     )
 
@@ -88,7 +88,7 @@ async def list_friend_request(user: UserOut = Depends(get_user_from_access_token
     data = []
 
     async for document in FriendRequestCollection.find(
-        {"reciever_id": user.id, "status": Friends_Status.pending.value}
+        {"receiver_id": user.id, "status": Friends_Status.pending.value}
     ):
         sender = await user_collection.find_one(
             {"_id": ObjectId(document["sender_id"])}
@@ -113,7 +113,7 @@ async def accept_friend_request(
     user: UserOut = Depends(get_user_from_access_token),
 ):
     f_request = await FriendRequestCollection.find_one_and_update(
-        {"_id": ObjectId(request_id), "reciever_id": user.id},
+        {"_id": ObjectId(request_id), "receiver_id": user.id},
         {"$set": {"status": Friends_Status.accepted.value}},
         return_document=ReturnDocument.AFTER,
     )
@@ -124,7 +124,7 @@ async def accept_friend_request(
         )
 
     friend = await create_friends(
-        user1_id=f_request["reciever_id"], user2_id=f_request["sender_id"]
+        user1_id=f_request["receiver_id"], user2_id=f_request["sender_id"]
     )
 
     print(friend)

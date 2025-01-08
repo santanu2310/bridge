@@ -21,7 +21,7 @@ export const useMessageStore = defineStore("message", () => {
 	//data for current going conversation
 	const currentConversation = ref<{
 		convId: string | null;
-		recieverId: string | null;
+		receiverId: string | null;
 	} | null>(null);
 
 	//handle receiving message
@@ -46,7 +46,7 @@ export const useMessageStore = defineStore("message", () => {
 			id: msg.id,
 			conversationId: msg.conversation_id,
 			senderId: msg.sender_id,
-			recieverId: msg.reciever_id,
+			receiverId: msg.receiver_id,
 			message: msg.message,
 			sendingTime: msg.sending_time,
 			status: msg.status,
@@ -121,15 +121,15 @@ export const useMessageStore = defineStore("message", () => {
 		}
 		if (
 			currentConversation.value.convId == null &&
-			currentConversation.value.recieverId == null
+			currentConversation.value.receiverId == null
 		) {
-			console.error("Both conversationId and recieverId are null");
+			console.error("Both conversationId and receiverId are null");
 			return;
 		}
 
 		const msg = {
 			message: message,
-			reciever_id: currentConversation.value.recieverId,
+			receiver_id: currentConversation.value.receiverId,
 			conversation_id: currentConversation.value.convId,
 			temp_id: crypto.randomUUID(),
 		};
@@ -138,7 +138,7 @@ export const useMessageStore = defineStore("message", () => {
 		const iDbMessage: Message = {
 			id: msg.temp_id.toString(),
 			senderId: userStore.user.id,
-			recieverId: msg.reciever_id,
+			receiverId: msg.receiver_id,
 			conversationId: msg.conversation_id,
 			message: msg.message,
 			sendingTime: new Date().toISOString(),
@@ -151,7 +151,7 @@ export const useMessageStore = defineStore("message", () => {
 			conversations.value[msg.temp_id] = {
 				messages: [],
 				isActive: true,
-				participant: msg.reciever_id as string,
+				participant: msg.receiver_id as string,
 				lastMessageDate: new Date().toISOString(),
 			};
 			conversations.value[msg.temp_id].messages.push(iDbMessage);

@@ -67,7 +67,7 @@ export const useFriendStore = defineStore("friend", () => {
 		// If conversation in local database
 		if (conversation) {
 			if (
-				messageStore.currentConversation?.recieverId ==
+				messageStore.currentConversation?.receiverId ==
 				conversation.participant
 			) {
 				messageStore.currentConversation!.convId = conversation.id;
@@ -99,7 +99,7 @@ export const useFriendStore = defineStore("friend", () => {
 				//Add the conversation to indesedDb and to local variable
 				await indexedDbService.addRecord("conversation", convResponse);
 				if (
-					messageStore.currentConversation?.recieverId ==
+					messageStore.currentConversation?.receiverId ==
 					convResponse.participant
 				) {
 					messageStore.currentConversation!.convId = convResponse.id;
