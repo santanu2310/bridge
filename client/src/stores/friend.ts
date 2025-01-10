@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { reactive } from "vue";
+import { ref } from "vue";
 import axios from "axios";
 
 import { indexedDbService } from "@/services/indexDbServices";
@@ -10,7 +10,9 @@ import type { Conversation } from "@/types/Conversation";
 import { mapResponseToMessage, type Message } from "@/types/Message";
 
 export const useFriendStore = defineStore("friend", () => {
-	const friends = reactive<User[]>([]);
+	const friends = ref<User[]>();
+
+	const lastFriendsUpdate = localStorage.getItem("lastUpdated");
 
 	const messageStore = useMessageStore();
 
@@ -22,38 +24,54 @@ export const useFriendStore = defineStore("friend", () => {
 					objects: User[];
 				};
 
-			console.log(result);
+			friends.value = result.objects;
 
-			if (result.newlyCreated) {
-				const response = await axios({
-					method: "get",
-					url: "http://localhost:8000/friends/get-friends",
-					withCredentials: true,
-				});
+			let url = "http://localhost:8000/friends/get-friends";
 
-				if (response.status === 200) {
-					response.data.forEach((user: User) => {
-						indexedDbService.addRecord(
-							"friends",
-							mapResponseToUser(user)
-						);
-					});
-					friends.splice(
-						0,
-						friends.length,
-						...response.data.map(mapResponseToUser)
+			// Add the lastupdated date
+			if (!result.newlyCreated && lastFriendsUpdate) {
+				url += `?updateAfter=${lastFriendsUpdate}`;
+			}
+
+			const response = await axios({
+				method: "get",
+				url: url,
+				withCredentials: true,
+			});
+
+			if (response.status === 200) {
+				const updatedFriend: User[] = await Promise.all(
+					response.data.map(async (data: object) => {
+						const user = mapResponseToUser(data);
+						await indexedDbService.updateRecord("friends", user);
+
+						return user;
+					})
+				);
+
+				//update the original fiends
+				if (friends.value) {
+					const updatedFriendMap = new Map(
+						updatedFriend.map((user) => [user.id, user])
 					);
-					console.log(friends);
-					return;
+					friends.value.forEach((user: User) => {
+						if (updatedFriendMap.has(user.id)) {
+							Object.assign(user, updatedFriendMap.get(user.id)!);
+						}
+					});
 				}
-			} else friends.splice(0, friends.length, ...result.objects);
 
-			friends.sort((a, b) => {
+				localStorage.setItem("lastUpdated", new Date().toISOString());
+			}
+
+			friends.value.sort((a, b) => {
 				const aName = a.fullName || "";
 				const bName = b.fullName || "";
 				return aName.localeCompare(bName);
 			});
-		} catch (error) {}
+		} catch (error) {
+			console.error(error);
+		}
 	}
 
 	async function getConversation(userId: string): Promise<Message[] | null> {
@@ -117,8 +135,6 @@ export const useFriendStore = defineStore("friend", () => {
 			return null;
 		}
 	}
-
-	listFriend();
 
 	return { friends, getConversation, listFriend };
 });

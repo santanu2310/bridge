@@ -53,7 +53,7 @@ async def make_friend_request(
         )
 
     # Check if they are already friends
-    if FriendCollection.find_one(
+    if await FriendCollection.find_one(
         {"user_id": user.id, "friends_id": requested_user["_id"]}
     ):
         raise HTTPException(
@@ -61,7 +61,7 @@ async def make_friend_request(
         )
 
     # Check if the friend request already exist
-    if FriendRequestCollection.find_one(
+    if await FriendRequestCollection.find_one(
         {"sender_id": user.id, "receiver_id": requested_user["_id"]}
     ):
         raise HTTPException(
@@ -133,11 +133,17 @@ async def accept_friend_request(
 
 
 @router.get("/get-friends")
-async def list_friends(user: UserOut = Depends(get_user_from_access_token)):
+async def list_friends(
+    user: UserOut = Depends(get_user_from_access_token),
+    updated_after: Optional[datetime] = Query(
+        None,
+        alias="updateAfter",
+        description="Return only friends updated after this date (ISO 8601 format)",
+    ),
+):
 
-    friends = await get_friends_list(user.id)
+    friends = await get_friends_list(user.id, updated_after)
     friend_list = [UserOut(**user) for user in friends]
-    print(friend_list)
 
     return friend_list
 
