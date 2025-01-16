@@ -12,6 +12,8 @@ from ..schemas import (
     Message,
     Conversation,
     Message_Status,
+    DataPacket,
+    PacketType,
 )
 from ..utils import get_user_form_conversation
 
@@ -33,7 +35,7 @@ class ConnectionManager:
     def is_online(self, user_id: str):
         return user_id in self.active_connection
 
-    async def send_personal_message(self, user_id: str, message: Message):
+    async def send_personal_message(self, user_id: str, message: DataPacket):
         await self.active_connection[user_id].send_text(message.model_dump_json())
 
 
@@ -49,7 +51,13 @@ async def messages_socket(
     try:
         while True:
             data = await websocket.receive_text()
-            await handle_recieved_message(user.id, MessageData(**json.loads(data)))
+            data = json.loads(data)
+            if data["type"] == "ping":
+                await connections.send_personal_message(
+                    user_id=user.id, message=DataPacket(packet_type="pong")
+                )
+            else:
+                await handle_recieved_message(user.id, MessageData(**data["data"]))
 
     except WebSocketDisconnect:
         connections.disconnect(user.id)
@@ -87,7 +95,7 @@ async def handle_recieved_message(user_id: ObjectId, data: MessageData):
             conversation_resp = await ConversationCollection.insert_one(
                 conv_data.model_dump(exclude=["id"])
             )
-            data.conversation_id = conversation_resp
+            data.conversation_id = str(conversation_resp)
 
     # create a Message instance
     message_data = Message(
@@ -114,9 +122,11 @@ async def handle_recieved_message(user_id: ObjectId, data: MessageData):
         )
         message_data.id = response.inserted_id
 
+        data_packet = DataPacket(packet_type=PacketType.message, data=message_data)
+
         # send the message to the user reciever
         await connections.send_personal_message(
-            user_id=participant_id, message=message_data
+            user_id=participant_id, message=data_packet
         )
 
     else:
@@ -137,6 +147,8 @@ async def handle_recieved_message(user_id: ObjectId, data: MessageData):
     )
 
     # sending the message back to sender with other information
+    data_packet = DataPacket(packet_type=PacketType.message, data=message_data)
+
     await connections.send_personal_message(
-        user_id=message_data.sender_id, message=message_data
+        user_id=message_data.sender_id, message=data_packet
     )

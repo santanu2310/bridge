@@ -48,6 +48,19 @@ class Message_Status(str, Enum):
     read = "read"
 
 
+class PacketType(str, Enum):
+    ping = "ping"
+    pong = "pong"
+    message = "message"
+
+
+class UserRegistration(BaseModel):
+    username: str
+    full_name: str
+    email: EmailStr
+    password: str
+
+
 class UserOut(BaseModel):
     id: Optional[PyObjectId] = Field(
         alias="_id", default=None, serialization_alias="id"
@@ -118,6 +131,11 @@ class Message(BaseModel):
     message: str
     sending_time: datetime = Field(default_factory=datetime.now)
     status: Message_Status = Message_Status.send
+
+
+class DataPacket(BaseModel):
+    packet_type: PacketType
+    data: Optional[Message] = None
 
 
 class ConversationResponse(Conversation):

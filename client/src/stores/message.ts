@@ -1,13 +1,15 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
 import { indexedDbService } from "@/services/indexDbServices";
+import { Socket } from "@/services/socektServices";
 import type { Message } from "@/types/Message";
 import type { Conversation } from "@/types/Conversation";
 import { useUserStore } from "./user";
 
 export const useMessageStore = defineStore("message", () => {
-	const socket = new WebSocket("ws://localhost:8000/chat/socket");
-
+	// const socket = new WebSocket("ws://localhost:8000/chat/socket");
+	const socket = new Socket("ws://localhost:8000/chat/socket");
+	socket.connect();
 	const conversations = ref<{
 		[key: string]: {
 			messages: Message[];
@@ -25,8 +27,9 @@ export const useMessageStore = defineStore("message", () => {
 	} | null>(null);
 
 	//handle receiving message
-	socket.onmessage = async (event) => {
-		const msg = JSON.parse(event.data);
+	socket.on("message", async (event) => {
+		console.log(event);
+		const msg = event;
 
 		// Validate required field
 		if (
@@ -113,7 +116,7 @@ export const useMessageStore = defineStore("message", () => {
 
 		// Store the message in IndexedDB
 		await indexedDbService.addRecord("message", message);
-	};
+	});
 
 	async function sendMessage(message: string) {
 		if (!currentConversation.value) {
@@ -162,7 +165,7 @@ export const useMessageStore = defineStore("message", () => {
 			]?.messages.push(iDbMessage);
 		}
 
-		socket.send(JSON.stringify(msg));
+		socket.send(msg);
 	}
 
 	function deleteMessageFromList(
