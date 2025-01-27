@@ -12,7 +12,9 @@
   },
   "dependencies": {
     "axios": "^1.7.2",
+    "events": "^3.3.0",
     "pinia": "^2.1.7",
+    "timers": "^0.1.1",
     "vue": "^3.4.29",
     "vue-cookies": "^1.8.4",
     "vue-router": "^4.3.3",
@@ -20,7 +22,8 @@
   },
   "devDependencies": {
     "@tsconfig/node20": "^20.1.4",
-    "@types/node": "^20.14.5",
+    "@types/events": "^3.0.3",
+    "@types/node": "^20.17.12",
     "@vitejs/plugin-vue": "^5.0.5",
     "@vue/tsconfig": "^0.5.1",
     "autoprefixer": "^10.4.19",
