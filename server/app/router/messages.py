@@ -12,7 +12,7 @@ from ..schemas import (
     Message,
     Conversation,
     Message_Status,
-    DataPacket,
+    MessagePacket,
     PacketType,
 )
 from ..utils import get_user_form_conversation
@@ -35,7 +35,7 @@ class ConnectionManager:
     def is_online(self, user_id: str):
         return user_id in self.active_connection
 
-    async def send_personal_message(self, user_id: str, message: DataPacket):
+    async def send_personal_message(self, user_id: str, message: MessagePacket):
         await self.active_connection[user_id].send_text(message.model_dump_json())
 
 
@@ -54,7 +54,7 @@ async def messages_socket(
             data = json.loads(data)
             if data["type"] == "ping":
                 await connections.send_personal_message(
-                    user_id=user.id, message=DataPacket(packet_type="pong")
+                    user_id=user.id, message=MessagePacket(packet_type="pong")
                 )
             else:
                 await handle_recieved_message(user.id, MessageData(**data["data"]))
@@ -122,7 +122,7 @@ async def handle_recieved_message(user_id: ObjectId, data: MessageData):
         )
         message_data.id = response.inserted_id
 
-        data_packet = DataPacket(packet_type=PacketType.message, data=message_data)
+        data_packet = MessagePacket(packet_type=PacketType.message, data=message_data)
 
         # send the message to the user reciever
         await connections.send_personal_message(
@@ -147,7 +147,7 @@ async def handle_recieved_message(user_id: ObjectId, data: MessageData):
     )
 
     # sending the message back to sender with other information
-    data_packet = DataPacket(packet_type=PacketType.message, data=message_data)
+    data_packet = MessagePacket(packet_type=PacketType.message, data=message_data)
 
     await connections.send_personal_message(
         user_id=message_data.sender_id, message=data_packet

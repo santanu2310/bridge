@@ -1,11 +1,12 @@
 import os
 from dotenv import load_dotenv
 import motor.motor_asyncio
+from redis import asyncio as aioredis
 
 # take environment variables from .env.
 load_dotenv()
 
-MONGODB_URL = os.environ["MONGODB_URL"]
+# MONGODB_URL = os.environ["MONGODB_URL"]
 LOCAL_MONGOD_URL = os.environ["LOCAL_MONGOD_URL"]
 
 client = motor.motor_asyncio.AsyncIOMotorClient(LOCAL_MONGOD_URL)
@@ -25,5 +26,10 @@ JWT_ACCESS_SECRET_KEY = os.environ["JWT_SECRET_KEY"]
 JWT_REFRESH_SECRET_KEY = os.environ["JWT_REFRESH_SECRET_KEY"]
 ALGORITHM = "HS256"
 
+# Redis
+REDIS_CLIENT = aioredis.Redis(host="localhost", port=6379, decode_responses=True)
+
+# Kafka
+KAFKA_CONNECTION = "localhost:9092"
 
 TIMEZONE = "Asia/Kolkata"

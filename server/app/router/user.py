@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from pymongo import ReturnDocument
 
-from ..models import User, UserRegistration
+from ..models import User
 from ..config import (
     user_collection,
     FriendRequestCollection,
@@ -18,6 +18,7 @@ from ..config import (
 )
 
 from ..schemas import (
+    UserRegistration,
     UserOut,
     UpdatebleUser,
     FriendRequestIn,
@@ -43,7 +44,7 @@ async def user_register(user: UserRegistration = Body(...)):
         return JSONResponse(content=created, status_code=status.HTTP_201_CREATED)
 
     except HTTPException as e:
-        return e
+        raise e
 
 
 @router.post("/get-token")

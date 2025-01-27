@@ -133,7 +133,7 @@ class Message(BaseModel):
     status: Message_Status = Message_Status.send
 
 
-class DataPacket(BaseModel):
+class MessagePacket(BaseModel):
     packet_type: PacketType
     data: Optional[Message] = None
 
@@ -154,7 +154,7 @@ class BaseMessage(BaseModel):
 
 
 class OnlineStatusMessage(BaseMessage):
-    type: Literal["online_status"]
+    type: str = "online_status"
     user_id: str
     status: Literal["online", "offline"]
 
@@ -179,3 +179,8 @@ class FriendRequestMessage(BaseMessage):
 SyncSocketMessage = Union[
     OnlineStatusMessage, FriendUpdateMessage, FriendRequestMessage
 ]
+
+
+class SyncPacket(BaseModel):
+    packet_type: PacketType
+    data: Optional[SyncSocketMessage] = None
