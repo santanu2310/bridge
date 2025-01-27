@@ -1,5 +1,5 @@
 import { EventEmitter } from "events";
-import type { PacketType, RawData, Packet } from "@/types/commons";
+import type { PacketType, RawData, Packet } from "@/types/Commons";
 
 type ReadyState = "opening" | "open" | "closing" | "closed";
 
@@ -56,7 +56,6 @@ export class Socket extends EventEmitter {
 			}
 
 			const data = JSON.parse(event.data);
-			console.log(data);
 
 			switch (data.packet_type) {
 				case "pong":
@@ -77,7 +76,6 @@ export class Socket extends EventEmitter {
 
 	private schedulePing() {
 		this.pingIntervalTimer = setTimeout(() => {
-			console.log("sending ping");
 			this.sendMessage("ping");
 			this.resetPingTimeout();
 		}, this.pingInterval);
