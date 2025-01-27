@@ -18,6 +18,9 @@ export default {
 				"green-500": "#10b783",
 				"color-white": "#fff",
 			},
+			fontSize: {
+				xxs: ["11px", "13px"],
+			},
 		},
 	},
 	plugins: [],
