@@ -1,9 +1,9 @@
 <script setup lang="ts">
 	import { useFriendStore } from "@/stores/friend";
-	import { useMessageStore } from "@/stores/message";
+	import { useUserStore } from "@/stores/user";
 
-	const messageStore = useMessageStore();
 	const friendStore = useFriendStore();
+	const userStore = useUserStore();
 
 	const props = defineProps<{
 		id: string;
@@ -11,11 +11,12 @@
 		displayName: string;
 	}>();
 
-	function setCurrentConversation() {
-		messageStore.currentConversation = {
-			recieverId: props.id,
+	async function setCurrentConversation() {
+		userStore.currentConversation = {
+			receiverId: props.id,
 			convId: null,
 		};
+		await friendStore.getConversation(props.id);
 		console.log(props.id);
 	}
 
@@ -24,10 +25,6 @@
 			.split(" ")
 			.map((word) => word.charAt(0).toUpperCase())
 			.join("");
-	}
-
-	function setAsCurrentConversation() {
-		friendStore.getConversations(props.id);
 	}
 </script>
 

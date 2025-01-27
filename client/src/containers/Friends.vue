@@ -2,8 +2,6 @@
 	import { ref } from "vue";
 	import type { Ref } from "vue";
 	import axios from "axios";
-	import { useUserStore } from "@/stores/user";
-	import { useMessageStore } from "@/stores/message";
 	import { useFriendStore } from "@/stores/friend";
 	import Friend from "@/components/Friend.vue";
 
@@ -77,7 +75,7 @@
 				<div class="w-full pr-6">
 					<Friend
 						:id="user.id as string"
-						:display-name="user.fullName as string"
+						:display-name="user.userName as string"
 						:img-url="user.profilePicUrl"
 					/>
 				</div>

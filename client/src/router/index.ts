@@ -27,6 +27,12 @@ const router = createRouter({
 			path: "/register",
 			name: "register",
 			component: () => import("../views/RegisterView.vue"),
+			beforeEnter: () => {
+				const authStore = useAuthStore();
+				if (authStore.isAuthenticated == true) {
+					return { name: "home" };
+				}
+			},
 		},
 		{
 			path: "/",

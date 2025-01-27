@@ -1,11 +1,31 @@
 import { defineStore } from "pinia";
-import { reactive } from "vue";
+import { reactive, ref, computed } from "vue";
 import axios from "axios";
 import { useAuthStore } from "@/stores/auth";
 import type { User } from "@/types/User";
+import type { Message } from "@/types/Message";
 
 export const useUserStore = defineStore("user", () => {
 	const authStore = useAuthStore();
+
+	// Reactive object to track conversation
+	const conversations = ref<{
+		[key: string]: {
+			messages: Message[];
+			participant: string;
+			lastMessageDate: string;
+			isActive: boolean;
+		};
+	}>({});
+
+	// Reactive object to track open chats
+	const currentConversation = ref<{
+		convId: string | null;
+		receiverId: string | null;
+	} | null>(null);
+
+	// Reactive object to track user online status
+	const userStatuses = ref<Record<string, boolean>>({});
 
 	const user = reactive<User>({
 		id: "",
@@ -17,8 +37,6 @@ export const useUserStore = defineStore("user", () => {
 		joinedDate: "",
 	});
 
-	const friends = reactive<User[]>([]);
-
 	async function getUser() {
 		try {
 			const response = await axios({
@@ -28,7 +46,7 @@ export const useUserStore = defineStore("user", () => {
 			});
 
 			if (response.status === 200) {
-				user.id = response.data._id;
+				user.id = response.data.id;
 				user.userName = response.data.username;
 				user.fullName = response.data.full_name;
 				user.email = response.data.email;
@@ -42,21 +60,31 @@ export const useUserStore = defineStore("user", () => {
 		}
 	}
 
-	// async function listFriends() {
-	// 	try {
-	// 		const response = await axios({
-	// 			method: "get",
-	// 			url: "http://localhost:8000/friends/get-friends",
-	// 			withCredentials: true,
-	// 		});
+	function useOnlineStatusManager() {
+		return {
+			// Check if user is online
+			isOnline: (userId: string) => {
+				console.log(userStatuses.value);
+				return userStatuses.value[userId] || false;
+			},
 
-	// 		if (response.status === 200) {
-	// 			console.log(response.data);
-	// 		}
-	// 	} catch (error) {
-	// 		console.error(error);
-	// 	}
-	// }
+			// Set a user as online
+			setOnline: (userId: string) => {
+				userStatuses.value[userId] = true;
+			},
 
-	return { user, getUser };
+			// Set a user as offline
+			setOffline: (userId: string) => {
+				userStatuses.value[userId] = false;
+			},
+		};
+	}
+
+	return {
+		user,
+		conversations,
+		currentConversation,
+		getUser,
+		useOnlineStatusManager,
+	};
 });

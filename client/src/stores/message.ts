@@ -7,30 +7,27 @@ import type { Conversation } from "@/types/Conversation";
 import { useUserStore } from "./user";
 
 export const useMessageStore = defineStore("message", () => {
-	// const socket = new WebSocket("ws://localhost:8000/chat/socket");
 	const socket = new Socket("ws://localhost:8000/chat/socket");
 	socket.connect();
-	const conversations = ref<{
-		[key: string]: {
-			messages: Message[];
-			participant: string;
-			lastMessageDate: string;
-			isActive: boolean;
-		};
-	}>({});
+	// const conversations = ref<{
+	// 	[key: string]: {
+	// 		messages: Message[];
+	// 		participant: string;
+	// 		lastMessageDate: string;
+	// 		isActive: boolean;
+	// 		isOnline: boolean;
+	// 	};
+	// }>({});
 	const userStore = useUserStore();
 
 	//data for current going conversation
-	const currentConversation = ref<{
-		convId: string | null;
-		receiverId: string | null;
-	} | null>(null);
+	// const currentConversation = ref<{
+	// 	convId: string | null;
+	// 	receiverId: string | null;
+	// } | null>(null);
 
 	//handle receiving message
-	socket.on("message", async (event) => {
-		console.log(event);
-		const msg = event;
-
+	socket.on("message", async (msg) => {
 		// Validate required field
 		if (
 			!msg.id ||
@@ -73,7 +70,7 @@ export const useMessageStore = defineStore("message", () => {
 
 			//TODO: a function to retrive all info about the conversation and update the indesed db
 
-			conversations.value[message.conversationId as string] = {
+			userStore.conversations[message.conversationId as string] = {
 				isActive: true,
 				messages: [],
 				lastMessageDate: message.sendingTime as string,
@@ -84,8 +81,8 @@ export const useMessageStore = defineStore("message", () => {
 		} else {
 			// For recent conversation
 			if (
-				currentConversation.value == null ||
-				currentConversation.value.convId != message.conversationId
+				userStore.currentConversation == null ||
+				userStore.currentConversation.convId != message.conversationId
 			) {
 				conversation.unseenMessageIds!.push(message.id as string);
 			}
@@ -96,7 +93,7 @@ export const useMessageStore = defineStore("message", () => {
 			}
 
 			// Update the last conversation datetime
-			conversations.value[message.conversationId!].lastMessageDate =
+			userStore.conversations[message.conversationId!].lastMessageDate =
 				message.sendingTime as string;
 
 			conversation.lastMessageDate = message.sendingTime;
@@ -112,19 +109,19 @@ export const useMessageStore = defineStore("message", () => {
 		}
 
 		// Append the new message to the current conversation
-		conversations.value[message.conversationId!].messages.push(message);
+		userStore.conversations[message.conversationId!].messages.push(message);
 
 		// Store the message in IndexedDB
 		await indexedDbService.addRecord("message", message);
 	});
 
 	async function sendMessage(message: string) {
-		if (!currentConversation.value) {
+		if (!userStore.currentConversation) {
 			return;
 		}
 		if (
-			currentConversation.value.convId == null &&
-			currentConversation.value.receiverId == null
+			userStore.currentConversation.convId == null &&
+			userStore.currentConversation.receiverId == null
 		) {
 			console.error("Both conversationId and receiverId are null");
 			return;
@@ -132,8 +129,8 @@ export const useMessageStore = defineStore("message", () => {
 
 		const msg = {
 			message: message,
-			receiver_id: currentConversation.value.receiverId,
-			conversation_id: currentConversation.value.convId,
+			receiver_id: userStore.currentConversation.receiverId,
+			conversation_id: userStore.currentConversation.convId,
 			temp_id: crypto.randomUUID(),
 		};
 
@@ -149,19 +146,19 @@ export const useMessageStore = defineStore("message", () => {
 		};
 		await indexedDbService.addRecord("message", iDbMessage);
 
-		if (!currentConversation.value.convId) {
+		if (!userStore.currentConversation.convId) {
 			//New conversation
-			conversations.value[msg.temp_id] = {
+			userStore.conversations[msg.temp_id] = {
 				messages: [],
 				isActive: true,
 				participant: msg.receiver_id as string,
 				lastMessageDate: new Date().toISOString(),
 			};
-			conversations.value[msg.temp_id].messages.push(iDbMessage);
+			userStore.conversations[msg.temp_id].messages.push(iDbMessage);
 		} else {
 			// Old conversation
-			conversations.value[
-				currentConversation.value.convId
+			userStore.conversations[
+				userStore.currentConversation.convId
 			]?.messages.push(iDbMessage);
 		}
 
@@ -175,7 +172,8 @@ export const useMessageStore = defineStore("message", () => {
 	) {
 		// Set candidateIndex to the last element on the first call
 		if (candidateIndex === -1) {
-			candidateIndex = conversations.value[convId].messages.length - 1;
+			candidateIndex =
+				userStore.conversations[convId].messages.length - 1;
 		}
 
 		// Base case: stop if candidateIndex is less than 0
@@ -183,14 +181,14 @@ export const useMessageStore = defineStore("message", () => {
 			return;
 		}
 		if (
-			conversations.value[convId].messages[candidateIndex].id ==
+			userStore.conversations[convId].messages[candidateIndex].id ==
 			targetedId
 		) {
-			conversations.value[convId].messages.splice(candidateIndex, 1);
+			userStore.conversations[convId].messages.splice(candidateIndex, 1);
 			return;
 		}
 		return deleteMessageFromList(convId, targetedId, candidateIndex - 1);
 	}
 
-	return { currentConversation, conversations, sendMessage };
+	return { sendMessage };
 });

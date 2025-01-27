@@ -4,7 +4,7 @@ import axios from "axios";
 
 import { indexedDbService } from "@/services/indexDbServices";
 import { mapResponseToUser, type User } from "@/types/User";
-import { useMessageStore } from "./message";
+import { useUserStore } from "./user";
 import type { Conversation } from "@/types/Conversation";
 // import type { Message } from "@/types/Message";
 import { mapResponseToMessage, type Message } from "@/types/Message";
@@ -14,7 +14,10 @@ export const useFriendStore = defineStore("friend", () => {
 
 	const lastFriendsUpdate = localStorage.getItem("lastUpdated");
 
-	const messageStore = useMessageStore();
+	const userStore = useUserStore();
+
+	const { isOnline, setOnline, setOffline } =
+		userStore.useOnlineStatusManager();
 
 	async function listFriend() {
 		try {
@@ -85,10 +88,10 @@ export const useFriendStore = defineStore("friend", () => {
 		// If conversation in local database
 		if (conversation) {
 			if (
-				messageStore.currentConversation?.receiverId ==
+				userStore.currentConversation?.receiverId ==
 				conversation.participant
 			) {
-				messageStore.currentConversation!.convId = conversation.id;
+				userStore.currentConversation!.convId = conversation.id;
 			}
 
 			const request = indexedDbService.getAllRecords("message", {
@@ -101,7 +104,7 @@ export const useFriendStore = defineStore("friend", () => {
 			//retrive from server
 			const response = await axios({
 				method: "get",
-				url: `http://localhost:8000/friends/get-conversation?friend_id=${userId}`,
+				url: `http://localhost:8000/conversation/get-conversation?friend_id=${userId}`,
 				withCredentials: true,
 			});
 
@@ -117,10 +120,10 @@ export const useFriendStore = defineStore("friend", () => {
 				//Add the conversation to indesedDb and to local variable
 				await indexedDbService.addRecord("conversation", convResponse);
 				if (
-					messageStore.currentConversation?.receiverId ==
+					userStore.currentConversation?.receiverId ==
 					convResponse.participant
 				) {
-					messageStore.currentConversation!.convId = convResponse.id;
+					userStore.currentConversation!.convId = convResponse.id;
 				}
 
 				//add the messages to the indesedDb
@@ -136,5 +139,27 @@ export const useFriendStore = defineStore("friend", () => {
 		}
 	}
 
-	return { friends, getConversation, listFriend };
+	async function getInitialOnlineStatus() {
+		try {
+			// Make a GET request to fetch the list of online users
+			const response = await axios({
+				method: "get",
+				url: "http://localhost:8000/conversation/online-users",
+				withCredentials: true,
+			});
+
+			if (response.status === 200) {
+				// Mark all friends as online
+				for (const userId of response.data.online_friends) {
+					setOnline(userId);
+				}
+			} else {
+				console.warn("Unexpected response format or status:", response);
+			}
+		} catch (error) {
+			console.error("Failed to fetch online friend : ", error);
+		}
+	}
+
+	return { friends, getConversation, listFriend, getInitialOnlineStatus };
 });

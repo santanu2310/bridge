@@ -1,5 +1,5 @@
 <script setup lang="ts">
-	import { ref } from "vue";
+	import { ref, onMounted } from "vue";
 
 	import IconLogo from "@/components/icons/IconLogo.vue";
 	import IconMessages from "@/components/icons/IconMessages.vue";
@@ -7,25 +7,35 @@
 	import IconFriends from "@/components/icons/IconFriends.vue";
 	import IconBell from "@/components/icons/IconBell.vue";
 
+	import Chats from "@/containers/Chats.vue";
 	import Friends from "@/containers/Friends.vue";
 	import Profile from "@/containers/Profile.vue";
 	import Notification from "@/containers/Notification.vue";
 	import Settings from "@/containers/Settings.vue";
+	import Conversation from "@/containers/Conversation.vue";
 
 	import { useUserStore } from "@/stores/user";
 	import { useMessageStore } from "@/stores/message";
-	import Conversation from "@/containers/Conversation.vue";
+	import { useSyncStore } from "@/stores/background_sync";
+	import { useFriendStore } from "@/stores/friend";
 
 	const userStore = useUserStore();
 	const messageStore = useMessageStore();
+	const friendStore = useFriendStore();
+
+	const syncStore = useSyncStore();
 	const leftContent = ref<string>("message");
 
 	function switchContainer(n: string) {
 		leftContent.value = n;
 	}
 
-	userStore.getUser();
-	console.log(userStore.user);
+	onMounted(async () => {
+		await userStore.getUser();
+		await syncStore.syncAndLoadConversationsFromLastDate();
+		await friendStore.listFriend();
+		await friendStore.getInitialOnlineStatus();
+	});
 </script>
 
 <template>
@@ -39,6 +49,7 @@
 				</div>
 				<div
 					class="w-full h-auto aspect-icon mt-2 flex items-center justify-center cursor-pointer"
+					@click="leftContent = 'chats'"
 				>
 					<IconMessages :size="35" />
 				</div>
@@ -74,6 +85,7 @@
 			</div>
 		</div>
 		<div class="left-sidebar w-96 h-full">
+			<Chats v-if="leftContent == 'chats'" />
 			<Friends v-if="leftContent == 'friends'" />
 			<Profile
 				v-if="leftContent == 'profile'"
@@ -83,7 +95,7 @@
 			<Settings v-if="leftContent == 'settings'" />
 		</div>
 		<div class="message">
-			<Conversation v-if="messageStore.currentConversation" />
+			<Conversation v-if="userStore.currentConversation" />
 		</div>
 	</main>
 </template>
