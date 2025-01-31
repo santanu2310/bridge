@@ -7,9 +7,15 @@ from .config import (
     FriendCollection,
     KAFKA_CONNECTION,
     ConversationCollection,
+    MessageCollection,
 )
 from .router.sync_sockets import send_message
-from .schemas import OnlineStatusMessage
+from .schemas import (
+    OnlineStatusMessage,
+    MessageEvent,
+    MessageStatusUpdate,
+    SyncMessageType,
+)
 
 
 async def watch_user_updates():
@@ -68,7 +74,6 @@ async def handle_online_status_update():
                     msg_data = OnlineStatusMessage(
                         user_id=user_id, status=data["status"]
                     )
-                    print(f"kafak message recieved and list of user ids: {user_list}")
                     await send_message(user_ids=user_list, message_data=msg_data)
 
                 except Exception as e:
@@ -82,3 +87,44 @@ async def handle_online_status_update():
             await consumer.stop()
             print("Reconnecting in 5 sec")
             asyncio.sleep(5)
+
+
+async def watch_message_updates():
+    """
+    Watches for updates in the MessageCollection and sends message status updates
+    to the sender when the message status changes.
+    """
+    async with MessageCollection.watch(
+        pipeline=[{"$match": {"operationType": "update"}}]
+    ) as stream:
+        async for change in stream:
+            try:
+                # Extract the required data from the event
+                message_id = change["documentKey"]["_id"]
+                updated_field = change["updateDescription"]["updatedFields"]
+                status = change["updateDescription"]["updatedFields"]["status"]
+
+                # Get the timestamp of the update
+                timestamp = next(iter(updated_field.values()))
+
+                # Fetch the updated message from the database
+                message_request = await MessageCollection.find_one({"_id": message_id})
+
+                # Construct a MessageEvent Object
+                message_event = MessageEvent(
+                    message_id=str(message_id), timestamp=timestamp
+                )
+
+                # Create a MessageStatusUpdate object to send to the user
+                sync_message = MessageStatusUpdate(
+                    data=[message_event],
+                    status=status,
+                )
+
+                # Send the status update to the message sender
+                await send_message(
+                    user_ids=[message_request["sender_id"]], message_data=sync_message
+                )
+
+            except Exception as e:
+                print(f"Error processing user update : {e}")

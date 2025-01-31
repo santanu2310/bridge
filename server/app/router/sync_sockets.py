@@ -4,9 +4,18 @@ from aiokafka import AIOKafkaProducer
 from bson import ObjectId
 from typing import Literal, List
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
-from ..schemas import SyncSocketMessage, UserOut, SyncPacket, PacketType
+from pymongo import UpdateOne
+from ..schemas import (
+    SyncSocketMessage,
+    UserOut,
+    SyncPacket,
+    PacketType,
+    SyncMessageType,
+    MessageStatusUpdate,
+    Message_Status,
+)
 from ..deps import get_user_from_access_token
-from ..config import KAFKA_CONNECTION
+from ..config import KAFKA_CONNECTION, MessageCollection
 
 router = APIRouter()
 
@@ -26,7 +35,6 @@ class ConnectionManager:
             await notify_online_status(user_id, "offline")
 
     def is_online(self, user_id: ObjectId):
-        print(f"{self.active_connection=}")
         return user_id in self.active_connection
 
     async def send_personal_message(self, user_id: ObjectId, message: SyncPacket):
@@ -52,14 +60,45 @@ async def websocket_endpoint(
                     user_id=user.id, message=SyncPacket(packet_type="pong")
                 )
             else:
-                handle_recieved_message(user_id=user.id, data=data["data"])
+                await handle_recieved_message(user_id=user.id, message=data["data"])
 
     except WebSocketDisconnect:
         await connections.disconnect(user.id)
     return
 
 
-async def handle_recieved_message(user_id: ObjectId, data: SyncSocketMessage): ...
+async def handle_recieved_message(user_id: ObjectId, message: SyncSocketMessage):
+    if message["type"] == SyncMessageType.message_status:
+        try:
+            # Parse the incoming message data into a structured model
+            message = MessageStatusUpdate(**message)
+            message_status = message.status.value
+
+            # Determine the correct field to update in the database
+            time_field = (
+                "seen_time"
+                if message_status == Message_Status.seen
+                else "received_time"
+            )
+            # Prepare bulk update operations for each message in the update list
+            updates = [
+                UpdateOne(
+                    {"_id": ObjectId(obj.message_id), time_field: None},
+                    {
+                        "$set": {
+                            "status": message_status,
+                            time_field: obj.timestamp,
+                        }
+                    },
+                )
+                for obj in message.data
+            ]
+
+            # Only proceed with the database update if there are updates to make
+            if updates:
+                request = await MessageCollection.bulk_write(updates)
+        except Exception as e:
+            print(e)
 
 
 async def send_message(user_ids: List[ObjectId], message_data: SyncSocketMessage):
@@ -70,6 +109,7 @@ async def send_message(user_ids: List[ObjectId], message_data: SyncSocketMessage
         user_ids : List of IDs to send the message to.
         message_data : The message to send.
     """
+
     try:
         for user_id in user_ids:
             if connections.is_online(user_id):

@@ -33,6 +33,7 @@
 	onMounted(async () => {
 		await userStore.getUser();
 		await syncStore.syncAndLoadConversationsFromLastDate();
+		await syncStore.syncMessageStatus();
 		await friendStore.listFriend();
 		await friendStore.getInitialOnlineStatus();
 	});

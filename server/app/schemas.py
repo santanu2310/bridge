@@ -1,4 +1,4 @@
-from typing import Optional, List, Any, Callable, Literal, Union
+from typing import Optional, List, Any, Callable, Literal, Union, Dict
 from datetime import datetime
 from bson import ObjectId
 from typing_extensions import Annotated
@@ -44,14 +44,20 @@ class Friends_Status(str, Enum):
 
 class Message_Status(str, Enum):
     send = "send"
-    recieve = "recieve"
-    read = "read"
+    recieved = "received"
+    seen = "seen"
 
 
 class PacketType(str, Enum):
     ping = "ping"
     pong = "pong"
     message = "message"
+
+
+class SyncMessageType(str, Enum):
+    message_status = "message_status"
+    online_status = "online_status"
+    friend_update = "friend_update"
 
 
 class UserRegistration(BaseModel):
@@ -83,8 +89,8 @@ class Friends(BaseModel):
     id: Optional[PyObjectId] = Field(alias="_id", default=None)
     user_id: PyObjectId
     friends_id: PyObjectId
-    update_at: datetime = Field(default_factory=datetime.now)
-    created_at: datetime = Field(default_factory=datetime.now)
+    update_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class FriendRequestIn(BaseModel):
@@ -98,8 +104,8 @@ class FriendRequestDB(BaseModel):
     receiver_id: PyObjectId
     message: str | None = None
     status: Friends_Status = Friends_Status.pending
-    created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class FriendRequestOut(BaseModel):
@@ -116,8 +122,8 @@ class Conversation(BaseModel):
     )
     participants: List[PyObjectId]
     unseen_message_ids: List[PyObjectId] = []
-    start_date: datetime = Field(default_factory=datetime.now)
-    last_message_date: datetime = Field(default_factory=datetime.now)
+    start_date: datetime = Field(default_factory=datetime.utcnow)
+    last_message_date: datetime = Field(default_factory=datetime.utcnow)
 
 
 class Message(BaseModel):
@@ -129,7 +135,9 @@ class Message(BaseModel):
     sender_id: PyObjectId
     receiver_id: Optional[PyObjectId] = None
     message: str
-    sending_time: datetime = Field(default_factory=datetime.now)
+    sending_time: datetime = Field(default_factory=datetime.utcnow)
+    received_time: Optional[datetime] = None
+    seen_time: Optional[datetime] = None
     status: Message_Status = Message_Status.send
 
 
@@ -149,6 +157,11 @@ class MessageData(BaseModel):
     temp_id: str | None
 
 
+class MessageEvent(BaseModel):
+    message_id: str
+    timestamp: datetime
+
+
 class BaseMessage(BaseModel):
     type: str
 
@@ -157,6 +170,12 @@ class OnlineStatusMessage(BaseMessage):
     type: str = "online_status"
     user_id: str
     status: Literal["online", "offline"]
+
+
+class MessageStatusUpdate(BaseMessage):
+    type: str = SyncMessageType.message_status.value
+    data: List[MessageEvent]
+    status: Message_Status
 
 
 class FriendUpdateMessage(BaseMessage):
@@ -177,7 +196,7 @@ class FriendRequestMessage(BaseMessage):
 
 # Combined Message Model for Websocket Handeling
 SyncSocketMessage = Union[
-    OnlineStatusMessage, FriendUpdateMessage, FriendRequestMessage
+    OnlineStatusMessage, FriendUpdateMessage, FriendRequestMessage, MessageStatusUpdate
 ]
 
 

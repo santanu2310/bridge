@@ -1,7 +1,8 @@
-from typing import Dict
+from typing import Dict, List, Optional
 import json
+from datetime import datetime
 from bson import ObjectId
-from fastapi import APIRouter, Depends, Request, WebSocketException, status
+from fastapi import APIRouter, Depends, Request, WebSocketException, status, Query
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from ..config import FriendCollection, ConversationCollection, MessageCollection
@@ -11,7 +12,6 @@ from ..schemas import (
     MessageData,
     Message,
     Conversation,
-    Message_Status,
     MessagePacket,
     PacketType,
 )
@@ -110,32 +110,21 @@ async def handle_recieved_message(user_id: ObjectId, data: MessageData):
         conv_id=message_data.conversation_id, user_id=message_data.sender_id
     )
 
+    # store the message document and add the id to the Message instance
+    response = await MessageCollection.insert_one(
+        message_data.model_dump(exclude=["id", "temp_id"])
+    )
+    message_data.id = response.inserted_id
+
+    data_packet = MessagePacket(packet_type=PacketType.message, data=message_data)
+
     # check the online status of the reciever
     if connections.is_online(participant_id):
-
-        # update the status of the message
-        message_data.status = Message_Status.recieve
-
-        # store the message document and add the id to the Message instance
-        response = await MessageCollection.insert_one(
-            message_data.model_dump(exclude=["id", "temp_id"])
-        )
-        message_data.id = response.inserted_id
-
-        data_packet = MessagePacket(packet_type=PacketType.message, data=message_data)
 
         # send the message to the user reciever
         await connections.send_personal_message(
             user_id=participant_id, message=data_packet
         )
-
-    else:
-        # store the message document and add the id to the Message instance
-        response = await MessageCollection.insert_one(
-            message_data.model_dump(exclude=["id", "temp_id"])
-        )
-
-        message_data.id = response.inserted_id
 
     # updating the last_message_date and pushing the new message id to unseen_message_id
     await ConversationCollection.find_one_and_update(
@@ -147,8 +136,35 @@ async def handle_recieved_message(user_id: ObjectId, data: MessageData):
     )
 
     # sending the message back to sender with other information
-    data_packet = MessagePacket(packet_type=PacketType.message, data=message_data)
-
     await connections.send_personal_message(
         user_id=message_data.sender_id, message=data_packet
     )
+
+
+@router.get("/updated-status")
+async def get_message_status_updates(
+    user: UserOut = Depends(get_user_from_access_token),
+    last_updated: Optional[datetime] = Query(
+        None, description="conversation which have message after this date"
+    ),
+):
+    try:
+        # Query the database for messages sent by the user that have been received or seen after `last_updated`
+        cursor = MessageCollection.find(
+            {
+                "sender_id": user.id,
+                "$or": [
+                    {"received_time": {"$gt": last_updated}},
+                    {"seen_time": {"$gt": last_updated}},
+                ],
+            }
+        )
+
+        # Convert the database response into a list of Message objects
+        response = await cursor.to_list(length=None)
+        message_list: List[Message] = [Message(**message) for message in response]
+
+        # Return the list of updated messages
+        return {"message_status_updates": message_list}
+    except Exception as e:
+        print(e)

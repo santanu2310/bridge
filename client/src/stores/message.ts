@@ -1,30 +1,22 @@
 import { defineStore } from "pinia";
-import { ref } from "vue";
 import { indexedDbService } from "@/services/indexDbServices";
 import { Socket } from "@/services/socektServices";
-import type { Message } from "@/types/Message";
+import { type Message, mapResponseToMessage } from "@/types/Message";
 import type { Conversation } from "@/types/Conversation";
+import {
+	type MessageStatusUpdate,
+	MessageStatus,
+	SyncMessageType,
+} from "@/types/SocketEvents";
 import { useUserStore } from "./user";
+import { useSyncStore } from "./background_sync";
 
 export const useMessageStore = defineStore("message", () => {
 	const socket = new Socket("ws://localhost:8000/chat/socket");
 	socket.connect();
-	// const conversations = ref<{
-	// 	[key: string]: {
-	// 		messages: Message[];
-	// 		participant: string;
-	// 		lastMessageDate: string;
-	// 		isActive: boolean;
-	// 		isOnline: boolean;
-	// 	};
-	// }>({});
-	const userStore = useUserStore();
 
-	//data for current going conversation
-	// const currentConversation = ref<{
-	// 	convId: string | null;
-	// 	receiverId: string | null;
-	// } | null>(null);
+	const userStore = useUserStore();
+	const syncStore = useSyncStore();
 
 	//handle receiving message
 	socket.on("message", async (msg) => {
@@ -41,16 +33,10 @@ export const useMessageStore = defineStore("message", () => {
 			return;
 		}
 
-		//Map the message data to the message variable
-		const message: Message = {
-			id: msg.id,
-			conversationId: msg.conversation_id,
-			senderId: msg.sender_id,
-			receiverId: msg.receiver_id,
-			message: msg.message,
-			sendingTime: msg.sending_time,
-			status: msg.status,
-		};
+		const message = mapResponseToMessage(msg);
+
+		// Store the message in IndexedDB
+		await indexedDbService.addRecord("message", message);
 
 		//check for conversation in indesedDb
 		const conversation: Conversation = (await indexedDbService.getRecord(
@@ -106,13 +92,25 @@ export const useMessageStore = defineStore("message", () => {
 				await indexedDbService.deleteRecord("message", msg.temp_id);
 				deleteMessageFromList(message.conversationId!, msg.temp_id);
 			}
+		} else {
+			// Send acknowledgement to server that the message is being received
+			const now = new Date().toISOString();
+			const syncMessge: MessageStatusUpdate = {
+				type: SyncMessageType.MessageStatus,
+				data: [
+					{
+						message_id: message.id as string,
+						timestamp: now,
+					},
+				],
+				status: MessageStatus.received,
+			};
+
+			syncStore.sendMessage(syncMessge);
 		}
 
 		// Append the new message to the current conversation
 		userStore.conversations[message.conversationId!].messages.push(message);
-
-		// Store the message in IndexedDB
-		await indexedDbService.addRecord("message", message);
 	});
 
 	async function sendMessage(message: string) {
@@ -143,6 +141,8 @@ export const useMessageStore = defineStore("message", () => {
 			message: msg.message,
 			sendingTime: new Date().toISOString(),
 			status: "pending",
+			receivedTime: null,
+			seenTime: null,
 		};
 		await indexedDbService.addRecord("message", iDbMessage);
 

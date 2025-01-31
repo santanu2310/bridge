@@ -267,7 +267,7 @@ class IndexedDbService {
 		});
 	}
 
-	async batchInsert(storeName: string, data: object[]): Promise<IDBValidKey> {
+	async batchUpsert(storeName: string, data: object[]): Promise<IDBValidKey> {
 		if (!this.db) {
 			await this.openDb();
 		}
@@ -285,7 +285,7 @@ class IndexedDbService {
 			let errorOccurred = false;
 
 			data.forEach((record) => {
-				const request = store.add(record);
+				const request = store.put(record);
 
 				request.onsuccess = (event: Event) => {
 					const key = (event.target as IDBRequest).result;

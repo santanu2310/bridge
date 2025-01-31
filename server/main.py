@@ -6,7 +6,11 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 import asyncio
 
 from app.router import messages, user, friends, sync_sockets, conversation
-from app.background_tasks import watch_user_updates, handle_online_status_update
+from app.background_tasks import (
+    watch_user_updates,
+    handle_online_status_update,
+    watch_message_updates,
+)
 
 app = FastAPI()
 
@@ -30,3 +34,4 @@ app.add_middleware(
 async def run_background_task():
     asyncio.create_task(watch_user_updates())
     asyncio.create_task(handle_online_status_update())
+    asyncio.create_task(watch_message_updates())

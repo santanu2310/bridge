@@ -10,8 +10,8 @@ from fastapi.security.utils import get_authorization_scheme_param
 from fastapi.openapi.models import OAuthFlows as OAuthFlowsModel
 from passlib.context import CryptContext
 
-from .models import UserRegistration, User
-from .schemas import Friends
+from .models import User
+from .schemas import Friends, UserRegistration
 from .config import (
     user_collection,
     FriendCollection,
@@ -40,12 +40,13 @@ def verify_password(password_hash: str, password_plain: str, salt: str):
 
 async def create_user(user: UserRegistration):
     if await user_collection.find_one({"username": user.username}):
+        print("find user using username")
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="username already exist"
         )
 
     if await user_collection.find_one({"email": user.email}):
-
+        print("find user")
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="The email address you entered is already in use. Please try a different email.",
@@ -56,9 +57,7 @@ async def create_user(user: UserRegistration):
     user_data = User(**user.dict())
     user_data.hashing_salt = salt
 
-    created = await user_collection.insert_one(
-        user_data.model_dump(by_alias=True, exclude=["id"])
-    )
+    created = await user_collection.insert_one(user_data.model_dump(exclude=["id"]))
 
     return {"message": "User created successfully"}
 
@@ -72,7 +71,7 @@ def create_access_token(data: dict, expire_delta: timedelta | None = None):
         expire = datetime.now(timezone.utc) + timedelta(hours=3)
 
     to_encode.update({"exp": expire})
-    print(to_encode)
+
     encoded_jwt = jwt.encode(to_encode, key=JWT_ACCESS_SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
@@ -100,7 +99,6 @@ async def create_friends(user1_id: ObjectId, user2_id: ObjectId):
     friend1 = await FriendCollection.insert_one(friend_for_1.model_dump(exclude=["id"]))
     friend2 = await FriendCollection.insert_one(friend_for_2.model_dump(exclude=["id"]))
 
-    print(friend1)
     return friend1
 
 
@@ -108,7 +106,7 @@ async def is_friends():
     pass
 
 
-async def get_friends_list(id: ObjectId):
+async def get_friends_list(id: ObjectId, updated_after: Optional[datetime] = None):
     # Pipeline to get users from user_id in friends collection
     pipeline = [
         {"$match": {"user_id": id}},
@@ -125,6 +123,9 @@ async def get_friends_list(id: ObjectId):
         {"$unwind": "$friend"},
         {"$replaceRoot": {"newRoot": "$friend"}},
     ]
+
+    if updated_after:
+        pipeline[0]["$match"]["last_message_date"] = {"$gt": updated_after}
 
     try:
         cursor = FriendCollection.aggregate(pipeline)

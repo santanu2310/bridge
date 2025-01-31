@@ -3,9 +3,15 @@ import axios from "axios";
 import { Socket } from "@/services/socektServices";
 import { type Conversation } from "@/types/Conversation";
 import { mapResponseToMessage, type Message } from "@/types/Message";
+import {
+	MessageStatus,
+	SyncMessageType,
+	type MessageEvent,
+	type MessageStatusUpdate,
+} from "@/types/SocketEvents";
 import { indexedDbService } from "@/services/indexDbServices";
-import { useMessageStore } from "./message";
 import { useUserStore } from "./user";
+import { updateMessageInState } from "@/utils/MessageUtils";
 
 interface ConvResponse {
 	id: string;
@@ -35,16 +41,43 @@ export const useSyncStore = defineStore("background_sync", () => {
 				else setOffline(msg.user_id);
 				break;
 
-			case "friend_update":
-				console.log("friend_update");
-				console.log(msg);
+			case "message_status":
+				// Iterate over the data which contain message_id and timestamp
+				for (const obj of msg.data) {
+					// Retrive the message from indexedDb
+					const message = (await indexedDbService.getRecord(
+						"message",
+						obj.message_id
+					)) as Message;
+
+					if (!message) continue; // Ensure message exists before proceeding
+
+					// Modify the message status and timestamp
+					message.status = msg.status;
+					if (msg.status == MessageStatus.received)
+						message.receivedTime = obj.timestamp;
+					else {
+						message.seenTime = obj.timestamp;
+					}
+
+					// Update the indexdDb record
+					await indexedDbService.updateRecord("message", message);
+
+					// Update the state(store ref variable)
+					updateMessageInState(message);
+				}
 				break;
+
 			case "friend_request":
 				console.log("friend_request");
 				console.log(msg);
 				break;
 		}
 	});
+
+	async function sendMessage(data: MessageStatusUpdate) {
+		socket.send(data);
+	}
 
 	async function syncAndLoadConversationsFromLastDate() {
 		const idbResponse = await indexedDbService.getAllRecords(
@@ -87,8 +120,6 @@ export const useSyncStore = defineStore("background_sync", () => {
 				})
 			);
 
-			console.log(userStore.conversations);
-
 			lastDate = conversations[0].lastMessageDate;
 		}
 
@@ -106,9 +137,35 @@ export const useSyncStore = defineStore("background_sync", () => {
 		if (response.status === 200) {
 			await Promise.all(
 				(response.data as ConvResponse[]).map(async (conv) => {
-					const messages: Message[] = conv.messages.map((msg) =>
-						mapResponseToMessage(msg)
-					);
+					// Prepare a status update payload for newly received messages
+					const statusUpdate: MessageStatusUpdate = {
+						type: SyncMessageType.MessageStatus,
+						data: [],
+						status: MessageStatus.received,
+					};
+
+					// Map response messages to `Message` objects and update their status if needed
+					const messages: Message[] = conv.messages.map((msg) => {
+						// Map the message response to Message object
+						const message = mapResponseToMessage(msg);
+						const receivedTime = new Date().toISOString();
+
+						// Update the newly received message status and timestamp and add it to `statusUpdate`
+						if (message.status == MessageStatus.send) {
+							const data: MessageEvent = {
+								message_id: message.id as string,
+								timestamp: receivedTime,
+							};
+
+							statusUpdate.data.push(data);
+
+							message.status = MessageStatus.received;
+							message.receivedTime = receivedTime;
+						}
+						return message;
+					});
+
+					console.log("messages : ", messages);
 
 					// Update the record to indexedDb
 					const conversation: Conversation = {
@@ -127,7 +184,7 @@ export const useSyncStore = defineStore("background_sync", () => {
 					);
 
 					//add each message to indexedDb
-					await indexedDbService.batchInsert("message", messages);
+					await indexedDbService.batchUpsert("message", messages);
 
 					// Initialize conversation if not exists
 					userStore.conversations[conv.id] ??= {
@@ -143,10 +200,59 @@ export const useSyncStore = defineStore("background_sync", () => {
 					userStore.conversations[conv.id].messages = messages;
 					userStore.conversations[conv.id].lastMessageDate =
 						conv.last_message_date;
+
+					await sendMessage(statusUpdate);
 				})
 			);
 		}
 	}
 
-	return { syncAndLoadConversationsFromLastDate };
+	async function syncMessageStatus() {
+		// Fetch all conversation record from indesedDB
+		const idbResponse = await indexedDbService.getAllRecords(
+			"conversation"
+		);
+
+		if (idbResponse.objects.length > 0) {
+			//arranging the conversatiton -> recent date first
+			const conversations = (idbResponse.objects as Conversation[]).sort(
+				(a, b) =>
+					new Date(b.lastMessageDate as string).getTime() -
+					new Date(a.lastMessageDate as string).getTime()
+			);
+
+			// Construct the API URL to fetch message status updates after the latest message date
+			const url = `http://localhost:8000/updated-status?last_updated=${conversations[0].lastMessageDate}`;
+			const response = await axios({
+				method: "get",
+				url: url,
+				withCredentials: true,
+			});
+
+			// Process the response if the request is successful
+			if (response.status === 200) {
+				if (response.data.message_status_updates.length > 0) {
+					// Map response data to message object
+					const messages: Message[] =
+						response.data.message_status_updates.map(
+							(msg: object) => mapResponseToMessage(msg)
+						);
+
+					// Store the updated message in indexedDB
+					await indexedDbService.batchUpsert("message", messages);
+
+					// Update the application state whith new messages
+					messages.forEach((element) => {
+						updateMessageInState(element);
+					});
+				}
+			}
+		}
+	}
+
+	return {
+		syncAndLoadConversationsFromLastDate,
+		sendMessage,
+		syncMessageStatus,
+	};
 });

@@ -5,6 +5,8 @@ export interface Message {
 	receiverId: string | null;
 	message: string | null;
 	sendingTime: string | null;
+	receivedTime: string | null;
+	seenTime: string | null;
 	status: string | null;
 }
 
@@ -16,6 +18,8 @@ export function mapResponseToMessage(response: object): Message {
 		receiverId: "receiver_id",
 		message: "message",
 		sendingTime: "sending_time",
+		receivedTime: "received_time",
+		seenTime: "seen_time",
 		status: "status",
 	};
 

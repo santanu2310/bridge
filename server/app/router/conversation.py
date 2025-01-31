@@ -150,17 +150,13 @@ async def get_online_status_for_active_conversations(
 
         friends_id = set()
         async for document in cursor:
-            print(document["participants"])
             friends_id.update(
                 str(id) for id in document["participants"] if id != user.id
             )
 
-        print(f"{friends_id=}")
-
         online_friends = [
             id for id in friends_id if connections.is_online(ObjectId(id))
         ]
-        print(f"{online_friends=}")
 
         return JSONResponse(
             content={"online_friends": online_friends}, status_code=status.HTTP_200_OK
