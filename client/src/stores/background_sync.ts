@@ -79,6 +79,46 @@ export const useSyncStore = defineStore("background_sync", () => {
 		socket.send(data);
 	}
 
+	async function markMessageAsSeen(message: Message) {
+		// Prevent unnecessary updates if the message is already marked as "seen"
+		if (message.status === MessageStatus.seen) return;
+
+		console.log(
+			"Sending seen status to server for messageId : ",
+			message.id
+		);
+
+		// Generate a timestamp for when the message is seen
+		const seenDateTime = new Date().toISOString();
+
+		// Prepare a status update payload for newly received messages
+		const data: MessageEvent = {
+			message_id: message.id as string,
+			timestamp: seenDateTime,
+		};
+		const statusUpdate: MessageStatusUpdate = {
+			type: SyncMessageType.MessageStatus,
+			data: [data],
+			status: MessageStatus.seen,
+		};
+		try {
+			// Send updated status to the server
+			await sendMessage(statusUpdate);
+
+			// Update the message data
+			message.status = MessageStatus.seen;
+			message.seenTime = seenDateTime;
+
+			// Update indesedDB record
+			await indexedDbService.updateRecord("message", message);
+
+			// Update UI state
+			updateMessageInState(message);
+		} catch (error) {
+			console.error("Failed processaing seen status : ", error);
+		}
+	}
+
 	async function syncAndLoadConversationsFromLastDate() {
 		const idbResponse = await indexedDbService.getAllRecords(
 			"conversation"
@@ -254,5 +294,6 @@ export const useSyncStore = defineStore("background_sync", () => {
 		syncAndLoadConversationsFromLastDate,
 		sendMessage,
 		syncMessageStatus,
+		markMessageAsSeen,
 	};
 });

@@ -164,10 +164,8 @@
 						>
 					</div>
 					<Message
-						:msg="msg.message as string"
-						:time="msg.sendingTime as string"
-						:status="msg.status as string"
-						:is-my-message="msg.senderId == myId"
+						:message="msg"
+						:user-id="userStore.user.id as string"
 					/>
 				</div>
 			</div>
