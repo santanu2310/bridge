@@ -22,8 +22,8 @@
 	const userStore = useUserStore();
 	const messageStore = useMessageStore();
 	const friendStore = useFriendStore();
-
 	const syncStore = useSyncStore();
+
 	const leftContent = ref<string>("message");
 
 	function switchContainer(n: string) {

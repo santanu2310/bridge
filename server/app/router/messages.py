@@ -2,10 +2,20 @@ from typing import Dict, List, Optional
 import json
 from datetime import datetime
 from bson import ObjectId
-from fastapi import APIRouter, Depends, Request, WebSocketException, status, Query
+from fastapi import (
+    APIRouter,
+    Depends,
+    WebSocketException,
+    status,
+    Query,
+)
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
-from ..config import FriendCollection, ConversationCollection, MessageCollection
+from ..config import (
+    FriendCollection,
+    ConversationCollection,
+    MessageCollection,
+)
 from ..deps import get_user_from_access_token
 from ..schemas import (
     UserOut,
@@ -17,25 +27,26 @@ from ..schemas import (
 )
 from ..utils import get_user_form_conversation
 
+
 router = APIRouter()
 
 
 class ConnectionManager:
     def __init__(self):
-        self.active_connection: Dict[str, WebSocket] = {}
+        self.active_connection: Dict[ObjectId, WebSocket] = {}
 
-    async def connect(self, user_id: str, websocket: WebSocket):
+    async def connect(self, user_id: ObjectId, websocket: WebSocket):
         await websocket.accept()
         self.active_connection[user_id] = websocket
 
-    def disconnect(self, user_id: str):
+    def disconnect(self, user_id: ObjectId):
         if user_id in self.active_connection:
             del self.active_connection[user_id]
 
-    def is_online(self, user_id: str):
+    def is_online(self, user_id: ObjectId):
         return user_id in self.active_connection
 
-    async def send_personal_message(self, user_id: str, message: MessagePacket):
+    async def send_personal_message(self, user_id: ObjectId, message: MessagePacket):
         await self.active_connection[user_id].send_text(message.model_dump_json())
 
 
@@ -139,6 +150,26 @@ async def handle_recieved_message(user_id: ObjectId, data: MessageData):
     await connections.send_personal_message(
         user_id=message_data.sender_id, message=data_packet
     )
+
+
+async def send_message(user_id: ObjectId, message_data: Message):
+    """
+    Send message to a userId if online
+
+    Args:
+        user_id : User Id (ObjectId)
+        message_data : The message to send.
+    """
+
+    try:
+        if connections.is_online(user_id):
+            data_packet = MessagePacket(
+                packet_type=PacketType.message, data=message_data
+            )
+
+            await connections.send_personal_message(user_id, data_packet)
+    except Exception as e:
+        print(e)
 
 
 @router.get("/updated-status")

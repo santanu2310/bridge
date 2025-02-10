@@ -4,10 +4,12 @@
 	import axios from "axios";
 
 	import { useAuthStore } from "@/stores/auth";
+	import { useFriendStore } from "@/stores/friend";
 	import { indexedDbService } from "@/services/indexDbServices";
 
 	const router = useRouter();
 	const authStore = useAuthStore();
+	const friendStore = useFriendStore();
 	const passwordVisible = ref(false);
 
 	const username = ref("");
@@ -27,6 +29,7 @@
 			if (response.status === 200) {
 				authStore.isAuthenticated = true;
 				indexedDbService.clearDatabase();
+				friendStore.listFriend();
 				router.push({ name: "home" });
 			}
 		} catch (error) {

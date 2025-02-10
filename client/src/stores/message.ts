@@ -1,7 +1,13 @@
+import axios from "axios";
 import { defineStore } from "pinia";
 import { indexedDbService } from "@/services/indexDbServices";
 import { Socket } from "@/services/socektServices";
-import { type Message, mapResponseToMessage } from "@/types/Message";
+import {
+	type Message,
+	type FileInfo,
+	FileType,
+	mapResponseToMessage,
+} from "@/types/Message";
 import type { Conversation } from "@/types/Conversation";
 import {
 	type MessageStatusUpdate,
@@ -10,6 +16,8 @@ import {
 } from "@/types/SocketEvents";
 import { useUserStore } from "./user";
 import { useSyncStore } from "./background_sync";
+import { addMessageInState } from "@/utils/MessageUtils";
+import { removeExtension } from "@/utils/StringUtils";
 
 export const useMessageStore = defineStore("message", () => {
 	const socket = new Socket("ws://localhost:8000/chat/socket");
@@ -25,10 +33,18 @@ export const useMessageStore = defineStore("message", () => {
 			!msg.id ||
 			!msg.conversation_id ||
 			!msg.sender_id ||
-			!msg.message ||
+			msg.message == null ||
 			!msg.sending_time ||
 			!msg.status
 		) {
+			console.log(
+				!msg.id,
+				!msg.conversation_id,
+				!msg.sender_id,
+				!msg.message,
+				!msg.sending_time,
+				!msg.status
+			);
 			console.error("Invalid message data:", msg);
 			return;
 		}
@@ -49,7 +65,6 @@ export const useMessageStore = defineStore("message", () => {
 			const newConversation: Conversation = {
 				id: message.conversationId,
 				participant: message.senderId,
-				unseenMessageIds: [message.id as string],
 				startDate: null,
 				lastMessageDate: message.sendingTime,
 			};
@@ -70,7 +85,7 @@ export const useMessageStore = defineStore("message", () => {
 				userStore.currentConversation == null ||
 				userStore.currentConversation.convId != message.conversationId
 			) {
-				conversation.unseenMessageIds!.push(message.id as string);
+				// conversation.unseenMessageIds!.push(message.id as string);
 			}
 			// Ongoing conversation
 			else {
@@ -139,6 +154,7 @@ export const useMessageStore = defineStore("message", () => {
 			receiverId: msg.receiver_id,
 			conversationId: msg.conversation_id,
 			message: msg.message,
+			attachment: null,
 			sendingTime: new Date().toISOString(),
 			status: "pending",
 			receivedTime: null,
@@ -190,5 +206,122 @@ export const useMessageStore = defineStore("message", () => {
 		return deleteMessageFromList(convId, targetedId, candidateIndex - 1);
 	}
 
-	return { sendMessage };
+	async function sendMessageWithFile(
+		file: File,
+		message: string | null,
+		receiverId: string | null,
+		conversationId: string | null
+	) {
+		if (!conversationId) {
+			console.error("conversationId is required");
+			return;
+		}
+		try {
+			// Make the data ready for indexedDb and add it
+			const messageData: Message = {
+				id: crypto.randomUUID(),
+				senderId: userStore.user.id,
+				receiverId: receiverId,
+				conversationId: conversationId,
+				message: message,
+				attachment: {
+					type: FileType.attachment,
+					name: file.name,
+					key: null,
+					tempFileId: null,
+					size: file.size,
+				},
+				sendingTime: new Date().toISOString(),
+				status: "pending",
+				receivedTime: null,
+				seenTime: null,
+			};
+			await indexedDbService.addRecord("message", messageData);
+
+			addMessageInState(messageData);
+			const response = await axios({
+				method: "get",
+				url: "http://localhost:8000/messages/upload-url",
+				withCredentials: true,
+			});
+
+			if (response.status === 200) {
+				response.data.fields["file"] = file;
+
+				const uploadResponse = await axios({
+					method: "post",
+					headers: {
+						"Content-Type": "multipart/form-data",
+					},
+					url: response.data.url,
+					data: response.data.fields,
+				});
+
+				console.log("status code : ", uploadResponse.status);
+
+				if (uploadResponse.status === 204) {
+					const fileData = {
+						temp_file_id: response.data.fields.key,
+						name: file.name,
+					};
+
+					const msg = {
+						message: message,
+						receiver_id: receiverId,
+						conversation_id: conversationId,
+						temp_id: messageData.id,
+						attachment: fileData,
+					};
+
+					const messageResponse = await axios({
+						method: "post",
+						url: "http://localhost:8000/messages/media-message",
+						data: msg,
+						withCredentials: true,
+					});
+
+					console.log(messageResponse);
+				}
+			}
+		} catch (error) {}
+	}
+
+	async function downloadFile(file: FileInfo) {
+		try {
+			const response = await axios({
+				method: "get",
+				url: `http://localhost:8000/messages/download-url?key=${file.key}`,
+				withCredentials: true,
+			});
+
+			if (response.status === 200) {
+				const fetchResponse = await fetch(response.data);
+
+				// Ensure the fetch is successfull
+				if (!fetchResponse.ok) {
+					throw new Error(
+						`Failed to fetch file: ${fetchResponse.statusText}`
+					);
+				}
+
+				//Create the url
+				const imageBlog = await fetchResponse.blob();
+				const imageURL = URL.createObjectURL(imageBlog);
+
+				// Create a temporary anchor element to trigger the download
+				const link = document.createElement("a");
+				link.href = imageURL;
+				link.download = removeExtension(file.name as string);
+
+				// Add the anchor tag, trigger the download and remove it,
+				document.body.appendChild(link);
+				link.click();
+				document.body.removeChild(link);
+			}
+		} catch (error) {
+			console.error("Error downloading file:", error);
+		}
+	}
+
+	return { sendMessage, sendMessageWithFile, downloadFile };
 });

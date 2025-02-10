@@ -1,7 +1,9 @@
 import os
 from dotenv import load_dotenv
 import motor.motor_asyncio
-from redis import asyncio as aioredis
+from pymongo import MongoClient
+
+from celery import Celery
 
 # take environment variables from .env.
 load_dotenv()
@@ -18,6 +20,15 @@ FriendCollection = db.get_collection("friends")
 ConversationCollection = db.get_collection("conversation")
 MessageCollection = db.get_collection("message")
 
+
+# Synchronous DB connection
+
+sync_client = MongoClient(LOCAL_MONGOD_URL)
+sync_db = sync_client.get_database("bridge")
+
+SyncMessageCollection = sync_db.get_collection("message")
+SyncConversationCollection = sync_db.get_collection("conversation")
+
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
@@ -27,9 +38,15 @@ JWT_REFRESH_SECRET_KEY = os.environ["JWT_REFRESH_SECRET_KEY"]
 ALGORITHM = "HS256"
 
 # Redis
-REDIS_CLIENT = aioredis.Redis(host="localhost", port=6379, decode_responses=True)
+# REDIS_CLIENT = aioredis.Redis(host="localhost", port=6379, decode_responses=True)
 
 # Kafka
 KAFKA_CONNECTION = "localhost:9092"
 
-TIMEZONE = "Asia/Kolkata"
+# AWS
+AWS_ACCESS_KEY = os.environ["AWS_ACCESS_KEY"]
+AWS_SECRET_KEY = os.environ["AWS_SECRET_KEY"]
+BUCKET_NAME = os.environ["BUCKET_NAME"]
+
+
+celery_app = Celery("tasks", broker="redis://localhost:6379")

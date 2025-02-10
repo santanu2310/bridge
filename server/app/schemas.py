@@ -1,10 +1,9 @@
-from typing import Optional, List, Any, Callable, Literal, Union, Dict
+from typing import Optional, List, Any, Callable, Literal, Union
 from datetime import datetime
 from bson import ObjectId
 from typing_extensions import Annotated
 from enum import Enum, unique
-from pydantic import BaseModel, Field, EmailStr
-from pydantic.functional_validators import BeforeValidator
+from pydantic import BaseModel, Field, EmailStr, ConfigDict
 from pydantic_core import core_schema
 
 
@@ -58,6 +57,14 @@ class SyncMessageType(str, Enum):
     message_status = "message_status"
     online_status = "online_status"
     friend_update = "friend_update"
+
+
+class FileType(str, Enum):
+    video = "video"
+    image = "image"
+    audio = "audio"
+    document = "document"
+    attachment = "attachment"
 
 
 class UserRegistration(BaseModel):
@@ -121,26 +128,36 @@ class Conversation(BaseModel):
         alias="_id", default=None, serialization_alias="id"
     )
     participants: List[PyObjectId]
-    unseen_message_ids: List[PyObjectId] = []
     start_date: datetime = Field(default_factory=datetime.utcnow)
     last_message_date: datetime = Field(default_factory=datetime.utcnow)
 
 
+class FileInfo(BaseModel):
+    type: FileType
+    name: Optional[str] = None
+    key: Optional[str] = None
+    temp_file_id: Optional[str] = None
+    size: Optional[int] = None
+
+
 class Message(BaseModel):
     id: Optional[PyObjectId] = Field(
-        alias="_id", default=None, serialization_alias="id"
+        validation_alias="_id", default=None
     )
     temp_id: str | None = None  # exclued this while inserting to database
     conversation_id: PyObjectId
     sender_id: PyObjectId
     receiver_id: Optional[PyObjectId] = None
     message: str
+    attachment: Optional[FileInfo] = None
     sending_time: datetime = Field(default_factory=datetime.utcnow)
     received_time: Optional[datetime] = None
     seen_time: Optional[datetime] = None
     status: Message_Status = Message_Status.send
 
 
+class MessageNoAlias(Message):
+    id: Optional[str] = Field(default=None, serialization_alias="_id")
 class MessagePacket(BaseModel):
     packet_type: PacketType
     data: Optional[Message] = None
@@ -150,11 +167,17 @@ class ConversationResponse(Conversation):
     messages: List[Message]
 
 
+class FileData(BaseModel):
+    temp_file_id: Optional[str] = None
+    name: Optional[str] = None
+
+
 class MessageData(BaseModel):
     message: str
     receiver_id: str | None
     conversation_id: str | None
     temp_id: str | None
+    attachment: Optional[FileData] = None
 
 
 class MessageEvent(BaseModel):

@@ -210,7 +210,6 @@ export const useSyncStore = defineStore("background_sync", () => {
 					// Update the record to indexedDb
 					const conversation: Conversation = {
 						id: conv.id,
-						unseenMessageIds: conv.unseen_message_ids,
 						lastMessageDate: conv.last_message_date,
 						participant: conv.participants.find(
 							(id) => id != userStore.user.id
@@ -269,6 +268,8 @@ export const useSyncStore = defineStore("background_sync", () => {
 				withCredentials: true,
 			});
 
+			console.log(response.data);
+
 			// Process the response if the request is successful
 			if (response.status === 200) {
 				if (response.data.message_status_updates.length > 0) {
@@ -277,6 +278,8 @@ export const useSyncStore = defineStore("background_sync", () => {
 						response.data.message_status_updates.map(
 							(msg: object) => mapResponseToMessage(msg)
 						);
+
+					console.log(messages);
 
 					// Store the updated message in indexedDB
 					await indexedDbService.batchUpsert("message", messages);

@@ -15,14 +15,12 @@
 	import IconCall from "@/components/icons/IconCall.vue";
 	import IconVideoCall from "@/components/icons/IconVideoCall.vue";
 	import IconAbout from "@/components/icons/IconAbout.vue";
-	import IconMore from "@/components/icons/IconMore.vue";
+	import IconAdd from "@/components/icons/IconAdd.vue";
 	import IconSticker from "@/components/icons/IconSticker.vue";
 	import IconMic from "@/components/icons/IconMic.vue";
 	import IconSend from "@/components/icons/IconSend.vue";
+	import IconClose from "@/components/icons/IconClose.vue";
 	import Message from "@/components/Message.vue";
-
-	const imgUrl =
-		"https://doot-dark.react.themesbrand.com/static/media/avatar-3.6256d30dbaad2b8f4e60.jpg";
 
 	const messageStore = useMessageStore();
 	const userStore = useUserStore();
@@ -36,8 +34,31 @@
 	});
 
 	const text = ref<string>("");
+	const selectedFile = ref<File | null>(null);
+
+	const inputReference = ref<HTMLInputElement | null>(null);
 	const showEmojiBoard = ref(false);
 	const myId = userStore.user.id;
+
+	const handleFileUpload = (event: Event) => {
+		const file = inputReference.value?.files![0];
+		if (file) {
+			if (file.size > 10 * 1024 * 1024) {
+				alert("File size exceeds 10MB. Please select a smaller file.");
+				inputReference.value = null;
+			} else {
+				selectedFile.value = file;
+				inputReference.value = null;
+				console.log("Selected file:", file);
+				console.log(URL.createObjectURL(file));
+			}
+		}
+	};
+
+	const removeSelectedFile = () => {
+		selectedFile.value = null;
+		inputReference.value = null;
+	};
 
 	// Add a new property "showDate" == true if the day changes
 	const messages = computed(() => {
@@ -73,9 +94,18 @@
 	}
 
 	async function sendMessage() {
-		if (text.value != "") {
-			messageStore.sendMessage(text.value);
-			text.value = "";
+		if (selectedFile.value) {
+			messageStore.sendMessageWithFile(
+				selectedFile.value,
+				text.value,
+				userStore.currentConversation!.receiverId,
+				userStore.currentConversation!.convId
+			);
+		} else {
+			if (text.value != "") {
+				messageStore.sendMessage(text.value);
+				text.value = "";
+			}
 		}
 	}
 </script>
@@ -160,8 +190,8 @@
 									msg.sendingTime as string,
 									false
 								)
-							}}</span
-						>
+							}}
+						</span>
 					</div>
 					<Message
 						:message="msg"
@@ -170,14 +200,25 @@
 				</div>
 			</div>
 		</div>
+
 		<div
-			class="w-full h-20 px-2 flex items-center bg-color-background-mute relative"
+			class="w-full h-20 p-2 flex items-center bg-color-background-mute relative"
 		>
-			<button
-				class="h-8 mx-2 aspect-square bg-transparent border-none flex items-center justify-center"
+			<label
+				for="attachment"
+				class="h-8 mx-2 aspect-square bg-transparent border-none flex items-center justify-center rounded-full hover:bg-color-background-soft"
 			>
-				<IconMore :size="66" :rotate="90" />
-			</button>
+				<IconAdd :size="66" :rotate="90" />
+			</label>
+			<input
+				type="file"
+				name="attachment"
+				id="attachment"
+				hidden
+				ref="inputReference"
+				max="20971520"
+				@change="handleFileUpload"
+			/>
 			<button
 				class="h-8 mx-2 aspect-square bg-transparent border-none flex items-center justify-center"
 				@click="
@@ -188,9 +229,25 @@
 			>
 				<IconSticker :size="66" />
 			</button>
-			<div class="h-10 mx-2 flex flex-grow">
+			<div
+				class="h-10 mx-2 px-1 flex items-center flex-grow bg-color-background-soft rounded-lg"
+			>
+				<div
+					class="w-fit max-w-52 h-8 pl-3 pr-2 rounded-2xl bg-color-background flex items-center flex-nowrap"
+					v-if="selectedFile"
+				>
+					<span class="text-color-heading font-medium text-xs">{{
+						selectedFile.name
+					}}</span>
+					<button
+						class="h-3/5 w-auto aspect-square ml-2 rounded-full border-2 border-color-heading flex items-center justify-center"
+						@click="removeSelectedFile"
+					>
+						<IconClose :size="70" />
+					</button>
+				</div>
 				<input
-					class="w-full h-full px-3 text-sm text-color-heading bg-color-background-soft rounded-lg border-none outline-none"
+					class="h-full px-3 flex-grow text-sm text-color-heading bg-transparent rounded-lg border-none outline-none"
 					type="text"
 					v-model="text"
 					placeholder="Type your message ..."

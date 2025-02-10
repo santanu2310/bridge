@@ -1,17 +1,14 @@
 import os
 import jwt
 from bson import ObjectId
-from zoneinfo import ZoneInfo
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Optional, Any, cast
-from fastapi import HTTPException, status, Request, WebSocketException
-from fastapi.security import OAuth2
-from fastapi.security.utils import get_authorization_scheme_param
-from fastapi.openapi.models import OAuthFlows as OAuthFlowsModel
+from typing import Optional
+from fastapi import HTTPException, status, WebSocketException
 from passlib.context import CryptContext
+from aiokafka import AIOKafkaProducer
 
 from .models import User
-from .schemas import Friends, UserRegistration
+from .schemas import Friends, UserRegistration, Conversation, Message
 from .config import (
     user_collection,
     FriendCollection,
@@ -19,6 +16,7 @@ from .config import (
     JWT_ACCESS_SECRET_KEY,
     JWT_REFRESH_SECRET_KEY,
     ALGORITHM,
+    KAFKA_CONNECTION,
 )
 
 
@@ -150,7 +148,7 @@ async def get_user_form_conversation(conv_id: ObjectId, user_id: ObjectId):
                 reason="Invalid conversation id",
             )
 
-        if not user_id in conversation["participants"]:
+        if user_id not in conversation["participants"]:
             raise WebSocketException(
                 code=status.WS_1007_INVALID_FRAME_PAYLOAD_DATA,
                 reason="User not a participant in the conversation",
@@ -159,6 +157,73 @@ async def get_user_form_conversation(conv_id: ObjectId, user_id: ObjectId):
         return next(id for id in conversation["participants"] if id != user_id)
 
     except Exception as e:
+        print(e)
         raise WebSocketException(
             code=status.WS_1011_INTERNAL_ERROR, reason="Internal server error"
         )
+
+
+async def get_or_create_conversation(user_id: ObjectId, friend_id: ObjectId):
+    # check if the users are friend or not
+    friend = await FriendCollection.find_one(
+        {"user_id": user_id, "friends_id": friend_id}
+    )
+
+    if not friend:
+        raise WebSocketException(
+            code=status.WS_1003_UNSUPPORTED_DATA, reason="Invalid reciever id"
+        )
+
+    # check if conversations between the user exist
+    conversation = await ConversationCollection.find_one(
+        {"participants": {"$all": [user_id, friend_id]}}
+    )
+
+    if conversation:
+        # Return the conversation Id
+        return conversation["_id"]
+
+    else:
+        # create a new conversation document
+        conv_data = Conversation(participants=[user_id, friend_id])
+        conversation_resp = await ConversationCollection.insert_one(
+            conv_data.model_dump(exclude=["id"])
+        )
+
+        # Return the conversation Id
+        return str(conversation_resp)
+
+
+def get_file_extension(filename: str) -> str:
+    _, ext = os.path.splitext(filename)
+    return ext[1:].lower() if ext else ""
+
+
+async def publish_user_message(message: Message):
+    """
+    Notify Kafka about the online status of a user.
+
+    Args:
+        message: Message
+
+    This function:
+        1. Creates an AIOKafkaProducer instance to connect to the Kafka server.
+        2. Encodes a message containing message data.
+        3. Publishes the message to the "message" Kafka topic.
+        4. Gracefully stops the Kafka producer after sending the message.
+
+    If any error occurs during this process, it logs an error message.
+
+    Raises:
+        Prints an error message if the message could not be published to Kafka.
+    """
+    try:
+        producer = AIOKafkaProducer(bootstrap_servers=KAFKA_CONNECTION)
+        await producer.start()
+        data = message.model_dump_json(by_alias=True).encode("utf-8")
+
+        await producer.send_and_wait("message", data)
+        await producer.stop()
+    except Exception as e:
+        await producer.stop()
+        print("Unable to publish message to kafka : ", e)

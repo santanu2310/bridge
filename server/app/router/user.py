@@ -1,31 +1,18 @@
-import json
 from bson import ObjectId
 from typing import Annotated
 from datetime import timedelta, datetime, timezone
-from zoneinfo import ZoneInfo
-from fastapi import APIRouter, Body, HTTPException, status, Depends, Response, Request
+from fastapi import APIRouter, Body, HTTPException, status, Depends
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from pymongo import ReturnDocument
 
-from ..models import User
 from ..config import (
     user_collection,
-    FriendRequestCollection,
     ACCESS_TOKEN_EXPIRE_MINUTES,
     REFRESH_TOKEN_EXPIRE_DAYS,
-    TIMEZONE,
 )
 
-from ..schemas import (
-    UserRegistration,
-    UserOut,
-    UpdatebleUser,
-    FriendRequestIn,
-    FriendRequestDB,
-    Friends_Status,
-    FriendRequestOut,
-)
+from ..schemas import UserRegistration, UserOut, UpdatebleUser
 from ..utils import (
     create_user,
     create_access_token,

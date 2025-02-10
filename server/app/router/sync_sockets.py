@@ -1,8 +1,7 @@
-import asyncio
 import json
 from aiokafka import AIOKafkaProducer
 from bson import ObjectId
-from typing import Literal, List
+from typing import Literal, List, Dict
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from pymongo import UpdateOne
 from ..schemas import (
@@ -96,7 +95,7 @@ async def handle_recieved_message(user_id: ObjectId, message: SyncSocketMessage)
 
             # Only proceed with the database update if there are updates to make
             if updates:
-                request = await MessageCollection.bulk_write(updates)
+                await MessageCollection.bulk_write(updates)
         except Exception as e:
             print(e)
 

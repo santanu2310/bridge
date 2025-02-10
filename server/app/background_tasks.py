@@ -9,13 +9,10 @@ from .config import (
     ConversationCollection,
     MessageCollection,
 )
-from .router.sync_sockets import send_message
-from .schemas import (
-    OnlineStatusMessage,
-    MessageEvent,
-    MessageStatusUpdate,
-    SyncMessageType,
-)
+from .router.messages import send_message
+from .router.sync_sockets import send_message as send_sync_message
+from .schemas import OnlineStatusMessage, MessageEvent, MessageStatusUpdate, MessageNoAlias, Message
+from .utils import get_user_form_conversation
 
 
 async def watch_user_updates():
@@ -74,7 +71,7 @@ async def handle_online_status_update():
                     msg_data = OnlineStatusMessage(
                         user_id=user_id, status=data["status"]
                     )
-                    await send_message(user_ids=user_list, message_data=msg_data)
+                    await send_sync_message(user_ids=user_list, message_data=msg_data)
 
                 except Exception as e:
                     print("Error retrieving user:", e)
@@ -122,9 +119,45 @@ async def watch_message_updates():
                 )
 
                 # Send the status update to the message sender
-                await send_message(
+                await send_sync_message(
                     user_ids=[message_request["sender_id"]], message_data=sync_message
                 )
 
             except Exception as e:
                 print(f"Error processing user update : {e}")
+
+
+async def distribute_published_messages():
+    while True:
+        consumer = AIOKafkaConsumer("message", bootstrap_servers=KAFKA_CONNECTION)
+
+        try:
+            await consumer.start()
+
+            # Asyncronous Loop for iterating over the available messages
+            async for msg in consumer:
+                # Decoding the received data
+                data = json.loads(msg.value.decode("utf-8"))
+                message_alias = MessageNoAlias(**data)
+                message = Message.model_validate(message_alias.model_dump(by_alias=True))
+
+                # Send the message back to sender with all data
+                await send_message(user_id=message.sender_id, message_data=message)
+
+                # Getting the receiver's ID
+                receiver_id = await get_user_form_conversation(
+                    message.conversation_id, message.sender_id
+                )
+
+                # Sending the message to receiver
+                await send_message(user_id=receiver_id, message_data=message)
+
+        except json.JSONDecodeError as e:
+            print("Error decoding the kafka message : ", e)
+        except Exception as e:
+            print("Error in kafka consumer : ", e)
+
+        finally:
+            await consumer.stop()
+            print("Reconnecting in 5 sec")
+            asyncio.sleep(5)

@@ -112,7 +112,6 @@ export const useFriendStore = defineStore("friend", () => {
 				const convResponse: Conversation = {
 					id: response.data.id,
 					participant: response.data.participant,
-					unseenMessageIds: response.data.unseen_message_ids,
 					startDate: response.data.start_date,
 					lastMessageDate: response.data.last_message_date,
 				};
@@ -130,7 +129,7 @@ export const useFriendStore = defineStore("friend", () => {
 				const oldMessages = response.data.messages.map((msg: object) =>
 					mapResponseToMessage(msg)
 				);
-				indexedDbService.batchInsert("message", oldMessages);
+				indexedDbService.batchUpsert("message", oldMessages);
 
 				return oldMessages;
 			}
