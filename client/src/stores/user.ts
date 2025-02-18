@@ -39,11 +39,12 @@ export const useUserStore = defineStore("user", () => {
 
 	async function getUser() {
 		try {
-			const response = await axios({
+			const response = await authStore.authAxios({
 				method: "get",
-				url: "http://localhost:8000/user/me",
-				withCredentials: true,
+				url: "users/me",
 			});
+
+			console.log(response);
 
 			if (response.status === 200) {
 				user.id = response.data.id;

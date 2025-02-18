@@ -3,12 +3,11 @@ from datetime import datetime
 from bson import ObjectId
 from typing_extensions import Annotated
 from enum import Enum, unique
-from pydantic import BaseModel, Field, EmailStr, ConfigDict
+from pydantic import BaseModel, Field, EmailStr, FileUrl
 from pydantic_core import core_schema
 
 
 class _ObjectIdPydanticAnnotation:
-
     @classmethod
     def __get_pydantic_core_schema__(
         cls,
@@ -57,6 +56,7 @@ class SyncMessageType(str, Enum):
     message_status = "message_status"
     online_status = "online_status"
     friend_update = "friend_update"
+    friend_request = "friend_request"
 
 
 class FileType(str, Enum):
@@ -67,6 +67,45 @@ class FileType(str, Enum):
     attachment = "attachment"
 
 
+# class User(BaseModel):
+#     id: Optional[PyObjectId] = Field(alias="_id", default=None)
+#     username: str
+#     full_name: str | None = None
+#     email: EmailStr
+#     password: str | None = None
+#     bio: str | None = None
+#     profile_picture: str | None = None
+#     created_at: datetime = Field(default_factory=datetime.utcnow)
+#     hashing_salt: str | None = None
+
+
+class UserAuth(BaseModel):
+    id: Optional[PyObjectId] = Field(validation_alias="_id", default=None)
+    username: str
+    email: EmailStr
+    password: str
+    hashing_salt: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class UserAuthOut(BaseModel):
+    id: PyObjectId = Field(validation_alias="_id")
+    username: str
+    email: EmailStr
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class UserProfile(BaseModel):
+    id: Optional[PyObjectId] = Field(validation_alias="_id", default=None)
+    auth_id: PyObjectId
+    full_name: str
+    bio: str | None = None
+    profile_picture: str | None = None
+    banner_picture: Optional[FileUrl] = None
+    location: str | None = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class UserRegistration(BaseModel):
     username: str
     full_name: str
@@ -75,21 +114,22 @@ class UserRegistration(BaseModel):
 
 
 class UserOut(BaseModel):
-    id: Optional[PyObjectId] = Field(
-        alias="_id", default=None, serialization_alias="id"
-    )
+    id: PyObjectId = Field(alias="_id", serialization_alias="id")
     username: str
     full_name: str | None = None
     email: EmailStr
     bio: str | None = None
     profile_picture: str | None = None
+    banner_picture: Optional[FileUrl] = None
+    location: str | None = None
     created_at: datetime | None = None
 
 
 class UpdatebleUser(BaseModel):
-    full_name: str | None = None
     bio: str | None = None
     profile_picture: str | None = None
+    banner_picture: Optional[FileUrl] = None
+    location: str | None = None
 
 
 class Friends(BaseModel):
@@ -141,9 +181,7 @@ class FileInfo(BaseModel):
 
 
 class Message(BaseModel):
-    id: Optional[PyObjectId] = Field(
-        validation_alias="_id", default=None
-    )
+    id: Optional[PyObjectId] = Field(validation_alias="_id", default=None)
     temp_id: str | None = None  # exclued this while inserting to database
     conversation_id: PyObjectId
     sender_id: PyObjectId
@@ -157,10 +195,7 @@ class Message(BaseModel):
 
 
 class MessageNoAlias(Message):
-    id: Optional[str] = Field(default=None, serialization_alias="_id")
-class MessagePacket(BaseModel):
-    packet_type: PacketType
-    data: Optional[Message] = None
+    id: Optional[PyObjectId] = Field(default=None, serialization_alias="_id")
 
 
 class ConversationResponse(Conversation):
@@ -180,6 +215,11 @@ class MessageData(BaseModel):
     attachment: Optional[FileData] = None
 
 
+class MessagePacket(BaseModel):
+    type: PacketType
+    data: Optional[Union[Message, MessageData]] = None
+
+
 class MessageEvent(BaseModel):
     message_id: str
     timestamp: datetime
@@ -190,7 +230,7 @@ class BaseMessage(BaseModel):
 
 
 class OnlineStatusMessage(BaseMessage):
-    type: str = "online_status"
+    type: str = SyncMessageType.online_status.value
     user_id: str
     status: Literal["online", "offline"]
 
@@ -202,14 +242,14 @@ class MessageStatusUpdate(BaseMessage):
 
 
 class FriendUpdateMessage(BaseMessage):
-    type: Literal["friend_update"]
+    type: str = SyncMessageType.friend_update.value
     full_name: Optional[str]
     bio: Optional[str]
     profile_picture: Optional[str]
 
 
 class FriendRequestMessage(BaseMessage):
-    type: Literal["friend_request"]
+    type: str = SyncMessageType.friend_request.value
     request_id: str
     user: UserOut
     message: Optional[str]
@@ -224,5 +264,5 @@ SyncSocketMessage = Union[
 
 
 class SyncPacket(BaseModel):
-    packet_type: PacketType
+    type: PacketType
     data: Optional[SyncSocketMessage] = None

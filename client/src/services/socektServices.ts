@@ -57,7 +57,7 @@ export class Socket extends EventEmitter {
 
 			const data = JSON.parse(event.data);
 
-			switch (data.packet_type) {
+			switch (data.type) {
 				case "pong":
 					if (this.pingTimeoutTimer)
 						clearTimeout(this.pingTimeoutTimer);

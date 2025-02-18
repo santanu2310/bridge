@@ -1,9 +1,11 @@
 <script setup lang="ts">
 	import { ref } from "vue";
 	import { useRouter, RouterLink } from "vue-router";
-	import axios from "axios";
+	import { useAuthStore } from "@/stores/auth";
 
 	const router = useRouter();
+
+	const authStore = useAuthStore();
 
 	const passwordVisible = ref(false);
 
@@ -27,9 +29,9 @@
 			return;
 		}
 		try {
-			const response = await axios({
+			const response = await authStore.publicAxios({
 				method: "post",
-				url: "http://localhost:8000/user/register",
+				url: "users/register",
 				data: {
 					email: email.value,
 					username: username.value,

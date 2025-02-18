@@ -1,29 +1,25 @@
 from bson import ObjectId
-from typing import Optional
+from typing import Optional, Dict, List, Any
 from datetime import datetime
 from fastapi import APIRouter, Depends, status, HTTPException, Query
 from fastapi.responses import JSONResponse
 
-from ..config import (
-    ConversationCollection,
-    MessageCollection,
-)
-
-from ..schemas import (
+from app.core.schemas import (
     UserOut,
     Message,
     ConversationResponse,
 )
-
-from ..deps import get_user_from_access_token
-from .sync_sockets import connections
+from app.core.db import AsyncDatabase, get_async_database
+from app.deps import get_user_from_access_token_http
+from app.api.sync_socket.router import connections
 
 router = APIRouter()
 
 
 @router.get("/get-conversation")
 async def retrive_conversation(
-    user: UserOut = Depends(get_user_from_access_token),
+    user: UserOut = Depends(get_user_from_access_token_http),
+    db: AsyncDatabase = Depends(get_async_database),
     conversation_id: Optional[str] = Query(
         None, description="conversation id who's conversation is to retrive"
     ),
@@ -44,7 +40,7 @@ async def retrive_conversation(
         # This if else block retrives the conversation based on the data provided
         if not conversation_id:
             if friend_id:
-                conv_response = await ConversationCollection.find_one(
+                conv_response = await db.conversation.find_one(
                     {"participants": {"$all": [user.id, ObjectId(friend_id)]}}
                 )
             else:
@@ -53,7 +49,7 @@ async def retrive_conversation(
                     detail="Nither 'conversation_id' not 'friend_id' is given",
                 )
         else:
-            conv_response = await ConversationCollection.find_one(
+            conv_response = await db.conversation.find_one(
                 {"_id": ObjectId(conversation_id)}
             )
 
@@ -66,7 +62,7 @@ async def retrive_conversation(
         conversation = ConversationResponse(**conv_response)
 
         # Setting message query
-        message_query = {"conversation_id": conversation.id}
+        message_query: Dict[str, Any] = {"conversation_id": conversation.id}
         if after:
             message_query.setdefault("sending_time", {})["$gt"] = after
         else:
@@ -74,7 +70,7 @@ async def retrive_conversation(
 
         # Retrives messages, unpack and add the data to the converstion
         message_cursor = (
-            MessageCollection.find(message_query).sort("sending_time").limit(limit)
+            db.message.find(message_query).sort("sending_time").limit(limit)
         )
         messages = await message_cursor.to_list(length=limit)
 
@@ -92,13 +88,13 @@ async def retrive_conversation(
 
 @router.get("/list-conversations")
 async def list_conversations(
-    user: UserOut = Depends(get_user_from_access_token),
+    user: UserOut = Depends(get_user_from_access_token_http),
+    db: AsyncDatabase = Depends(get_async_database),
     after: Optional[datetime] = Query(
         None, description="conversation which have message after this date"
     ),
 ):
-
-    pipeline = [
+    pipeline: List[Dict[str, Any]] = [
         {
             "$match": {
                 "participants": {"$all": [user.id]},
@@ -118,7 +114,7 @@ async def list_conversations(
         pipeline[0]["$match"]["last_message_date"] = {"$gt": after}
 
     try:
-        cursor = ConversationCollection.aggregate(pipeline)
+        cursor = db.conversation.aggregate(pipeline)
         response = await cursor.to_list(length=None)
 
         # Map to pydentic model
@@ -138,7 +134,8 @@ async def list_conversations(
 
 @router.get("/online-users")
 async def get_online_status_for_active_conversations(
-    user: UserOut = Depends(get_user_from_access_token),
+    user: UserOut = Depends(get_user_from_access_token_http),
+    db: AsyncDatabase = Depends(get_async_database),
 ):
     pipeline = [
         {"$match": {"participants": {"$all": [user.id]}}},
@@ -146,9 +143,9 @@ async def get_online_status_for_active_conversations(
     ]
 
     try:
-        cursor = ConversationCollection.aggregate(pipeline=pipeline)
+        cursor = db.conversation.aggregate(pipeline=pipeline)
 
-        friends_id = set()
+        friends_id: set[str] = set()
         async for document in cursor:
             friends_id.update(
                 str(id) for id in document["participants"] if id != user.id

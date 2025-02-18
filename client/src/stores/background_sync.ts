@@ -11,6 +11,7 @@ import {
 } from "@/types/SocketEvents";
 import { indexedDbService } from "@/services/indexDbServices";
 import { useUserStore } from "./user";
+import { useAuthStore } from "./auth";
 import { updateMessageInState } from "@/utils/MessageUtils";
 
 interface ConvResponse {
@@ -24,12 +25,13 @@ interface ConvResponse {
 
 export const useSyncStore = defineStore("background_sync", () => {
 	const userStore = useUserStore();
+	const authStore = useAuthStore();
 
 	const { isOnline, setOnline, setOffline } =
 		userStore.useOnlineStatusManager();
 
 	// Creating a new socket instance and connecting it to server
-	const socket = new Socket("ws://localhost:8000/sync/socket");
+	const socket = new Socket("ws://localhost:8000/sync/");
 	socket.connect();
 
 	// Handle incoming WebSocket messages
@@ -165,13 +167,12 @@ export const useSyncStore = defineStore("background_sync", () => {
 
 		//retriving the messages after latestMessage date
 		const url = lastDate
-			? `http://localhost:8000/conversation/list-conversations?after=${lastDate}`
-			: "http://localhost:8000/conversation/list-conversations";
+			? `conversations/list-conversations?after=${lastDate}`
+			: "conversations/list-conversations";
 
-		const response = await axios({
+		const response = await authStore.authAxios({
 			method: "get",
 			url: url,
-			withCredentials: true,
 		});
 
 		if (response.status === 200) {
@@ -261,11 +262,10 @@ export const useSyncStore = defineStore("background_sync", () => {
 			);
 
 			// Construct the API URL to fetch message status updates after the latest message date
-			const url = `http://localhost:8000/updated-status?last_updated=${conversations[0].lastMessageDate}`;
-			const response = await axios({
+			const url = `messages/updated-status?last_updated=${conversations[0].lastMessageDate}`;
+			const response = await authStore.authAxios({
 				method: "get",
 				url: url,
-				withCredentials: true,
 			});
 
 			console.log(response.data);

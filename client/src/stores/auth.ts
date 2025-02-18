@@ -8,6 +8,15 @@ export const useAuthStore = defineStore("authentication", () => {
 	const isLoading = ref(true);
 	const $cookies = inject<typeof VueCookies>("$cookies");
 
+	const authAxios = axios.create({
+		baseURL: "http://localhost:8000/",
+		withCredentials: true,
+	});
+
+	const publicAxios = axios.create({
+		baseURL: "http://localhost:8000/",
+	});
+
 	if ($cookies) {
 		if ($cookies.get("access_t") != null) {
 			isAuthenticated.value = true;
@@ -19,10 +28,9 @@ export const useAuthStore = defineStore("authentication", () => {
 
 	async function getTokenPair(): Promise<void> {
 		try {
-			const response = await axios({
+			const response = await authAxios({
 				method: "post",
-				url: "http://localhost:8000/user/refresh-token",
-				withCredentials: true,
+				url: "users/refresh-token",
 			});
 			if (response.status === 200) {
 				isAuthenticated.value = true;
@@ -32,5 +40,5 @@ export const useAuthStore = defineStore("authentication", () => {
 			isLoading.value = false;
 		}
 	}
-	return { isAuthenticated, isLoading, getTokenPair };
+	return { isAuthenticated, isLoading, getTokenPair, authAxios, publicAxios };
 });

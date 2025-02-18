@@ -16,15 +16,17 @@ import {
 } from "@/types/SocketEvents";
 import { useUserStore } from "./user";
 import { useSyncStore } from "./background_sync";
+import { useAuthStore } from "./auth";
 import { addMessageInState } from "@/utils/MessageUtils";
 import { removeExtension } from "@/utils/StringUtils";
 
 export const useMessageStore = defineStore("message", () => {
-	const socket = new Socket("ws://localhost:8000/chat/socket");
+	const socket = new Socket("ws://localhost:8000/message/scoket/");
 	socket.connect();
 
 	const userStore = useUserStore();
 	const syncStore = useSyncStore();
+	const authStore = useAuthStore();
 
 	//handle receiving message
 	socket.on("message", async (msg) => {
@@ -239,11 +241,9 @@ export const useMessageStore = defineStore("message", () => {
 			await indexedDbService.addRecord("message", messageData);
 
 			addMessageInState(messageData);
-			const response = await axios({
-				method: "get",
-				url: "http://localhost:8000/messages/upload-url",
-				withCredentials: true,
-			});
+			const response = await authStore.authAxios.get(
+				"messages/upload-url"
+			);
 
 			if (response.status === 200) {
 				response.data.fields["file"] = file;
@@ -273,11 +273,10 @@ export const useMessageStore = defineStore("message", () => {
 						attachment: fileData,
 					};
 
-					const messageResponse = await axios({
+					const messageResponse = await authStore.authAxios({
 						method: "post",
-						url: "http://localhost:8000/messages/media-message",
+						url: "messages/media-message",
 						data: msg,
-						withCredentials: true,
 					});
 
 					console.log(messageResponse);
@@ -288,11 +287,9 @@ export const useMessageStore = defineStore("message", () => {
 
 	async function downloadFile(file: FileInfo) {
 		try {
-			const response = await axios({
-				method: "get",
-				url: `http://localhost:8000/messages/download-url?key=${file.key}`,
-				withCredentials: true,
-			});
+			const response = await authStore.authAxios.get(
+				`messages/download-url?key=${file.key}`
+			);
 
 			if (response.status === 200) {
 				const fetchResponse = await fetch(response.data);

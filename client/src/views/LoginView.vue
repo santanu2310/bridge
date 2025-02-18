@@ -1,7 +1,6 @@
 <script setup lang="ts">
 	import { ref } from "vue";
 	import { RouterLink, useRouter } from "vue-router";
-	import axios from "axios";
 
 	import { useAuthStore } from "@/stores/auth";
 	import { useFriendStore } from "@/stores/friend";
@@ -17,14 +16,11 @@
 
 	async function getToken() {
 		try {
-			const response = await axios({
+			const response = await authStore.authAxios({
 				method: "post",
-				url: "http://localhost:8000/user/get-token",
+				url: "users/get-token",
 				data: `username=${username.value}&password=${password.value}`,
-				withCredentials: true,
 			});
-
-			console.log(response.status);
 
 			if (response.status === 200) {
 				authStore.isAuthenticated = true;

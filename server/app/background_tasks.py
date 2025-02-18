@@ -1,38 +1,42 @@
 from bson import ObjectId
 import json
 import asyncio
-from aiokafka import AIOKafkaConsumer
-from .config import (
-    user_collection,
-    FriendCollection,
-    KAFKA_CONNECTION,
-    ConversationCollection,
-    MessageCollection,
+from typing import List
+from aiokafka import AIOKafkaConsumer  # type: ignore
+from app.core.config import settings
+from app.api.msg_socket.router import send_message
+from app.api.sync_socket.router import send_message as send_sync_message
+from app.core.schemas import (
+    OnlineStatusMessage,
+    MessageEvent,
+    MessageStatusUpdate,
+    MessageNoAlias,
+    Message,
 )
-from .router.messages import send_message
-from .router.sync_sockets import send_message as send_sync_message
-from .schemas import OnlineStatusMessage, MessageEvent, MessageStatusUpdate, MessageNoAlias, Message
-from .utils import get_user_form_conversation
+from app.core.db import AsyncDatabase
+from app.api.msg_socket.services import get_user_form_conversation
 
 
-async def watch_user_updates():
-    async with user_collection.watch(
+async def watch_user_updates(db: AsyncDatabase):
+    async with db.user_profile.watch(
         pipeline=[{"$match": {"operationType": "update"}}]
     ) as stream:
         async for change in stream:
             try:
-                cursor = FriendCollection.find({"_id": change["documentKey"]["_id"]})
+                cursor = db.friends.find({"_id": change["documentKey"]["_id"]})
 
                 # Extracting the `friends_id` values from each result document
-                friends_ids = [doc["friends_id"] async for doc in cursor]
+                friends_ids: List[ObjectId] = [
+                    doc["friends_id"] async for doc in cursor
+                ]
 
                 # Sending the data to the online frinds
-                await send_message(
+                await send_sync_message(
                     friends_ids, change["updateDescription"]["updatedFields"]
                 )
 
                 # updating the lastupdate fo friends data
-                await FriendCollection.update_many(
+                await db.friends.update_many(
                     {"friends_id": change["documentKey"]["_id"]},
                     {"$set": {"update_at": change["wallTime"]}},
                 )
@@ -41,9 +45,11 @@ async def watch_user_updates():
                 print(f"Error processing user update : {e}")
 
 
-async def handle_online_status_update():
+async def handle_online_status_update(db: AsyncDatabase):
     while True:
-        consumer = AIOKafkaConsumer("online_status", bootstrap_servers=KAFKA_CONNECTION)
+        consumer = AIOKafkaConsumer(
+            "online_status", bootstrap_servers=settings.KAFKA_CONNECTION
+        )
 
         try:
             await consumer.start()
@@ -53,11 +59,11 @@ async def handle_online_status_update():
                 # Decoding the received data
                 data = json.loads(msg.value.decode("utf-8"))
                 user_id = data["user_id"]
-                user_list = []
+                user_list: List[ObjectId] = []
 
                 try:
                     # Retrive the conversations with the user
-                    async for document in ConversationCollection.find(
+                    async for document in db.conversation.find(
                         {"participants": {"$all": [ObjectId(user_id)]}}
                     ):
                         # Add the firend id to the list
@@ -83,15 +89,15 @@ async def handle_online_status_update():
         finally:
             await consumer.stop()
             print("Reconnecting in 5 sec")
-            asyncio.sleep(5)
+            await asyncio.sleep(5)
 
 
-async def watch_message_updates():
+async def watch_message_updates(db: AsyncDatabase):
     """
     Watches for updates in the MessageCollection and sends message status updates
     to the sender when the message status changes.
     """
-    async with MessageCollection.watch(
+    async with db.message.watch(
         pipeline=[{"$match": {"operationType": "update"}}]
     ) as stream:
         async for change in stream:
@@ -105,7 +111,7 @@ async def watch_message_updates():
                 timestamp = next(iter(updated_field.values()))
 
                 # Fetch the updated message from the database
-                message_request = await MessageCollection.find_one({"_id": message_id})
+                message_request = await db.message.find_one({"_id": message_id})
 
                 # Construct a MessageEvent Object
                 message_event = MessageEvent(
@@ -129,7 +135,9 @@ async def watch_message_updates():
 
 async def distribute_published_messages():
     while True:
-        consumer = AIOKafkaConsumer("message", bootstrap_servers=KAFKA_CONNECTION)
+        consumer = AIOKafkaConsumer(
+            "message", bootstrap_servers=settings.KAFKA_CONNECTION
+        )
 
         try:
             await consumer.start()
@@ -139,7 +147,9 @@ async def distribute_published_messages():
                 # Decoding the received data
                 data = json.loads(msg.value.decode("utf-8"))
                 message_alias = MessageNoAlias(**data)
-                message = Message.model_validate(message_alias.model_dump(by_alias=True))
+                message = Message.model_validate(
+                    message_alias.model_dump(by_alias=True)
+                )
 
                 # Send the message back to sender with all data
                 await send_message(user_id=message.sender_id, message_data=message)

@@ -1,12 +1,11 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
 import axios from "axios";
-
+import { useAuthStore } from "./auth";
 import { indexedDbService } from "@/services/indexDbServices";
 import { mapResponseToUser, type User } from "@/types/User";
 import { useUserStore } from "./user";
 import type { Conversation } from "@/types/Conversation";
-// import type { Message } from "@/types/Message";
 import { mapResponseToMessage, type Message } from "@/types/Message";
 
 export const useFriendStore = defineStore("friend", () => {
@@ -15,6 +14,7 @@ export const useFriendStore = defineStore("friend", () => {
 	const lastFriendsUpdate = localStorage.getItem("lastUpdated");
 
 	const userStore = useUserStore();
+	const authStore = useAuthStore();
 
 	const { isOnline, setOnline, setOffline } =
 		userStore.useOnlineStatusManager();
@@ -29,17 +29,16 @@ export const useFriendStore = defineStore("friend", () => {
 
 			friends.value = result.objects;
 
-			let url = "http://localhost:8000/friends/get-friends";
+			let url = "friends/get-friends";
 
 			// Add the lastupdated date
 			if (!result.newlyCreated && lastFriendsUpdate) {
 				url += `?updateAfter=${lastFriendsUpdate}`;
 			}
 
-			const response = await axios({
+			const response = await authStore.authAxios({
 				method: "get",
 				url: url,
-				withCredentials: true,
 			});
 
 			if (response.status === 200) {
@@ -102,9 +101,9 @@ export const useFriendStore = defineStore("friend", () => {
 			return oldMessages;
 		} else {
 			//retrive from server
-			const response = await axios({
+			const response = await authStore.authAxios({
 				method: "get",
-				url: `http://localhost:8000/conversation/get-conversation?friend_id=${userId}`,
+				url: `conversations/get-conversation?friend_id=${userId}`,
 				withCredentials: true,
 			});
 
@@ -141,10 +140,9 @@ export const useFriendStore = defineStore("friend", () => {
 	async function getInitialOnlineStatus() {
 		try {
 			// Make a GET request to fetch the list of online users
-			const response = await axios({
+			const response = await authStore.authAxios({
 				method: "get",
-				url: "http://localhost:8000/conversation/online-users",
-				withCredentials: true,
+				url: "conversations/online-users",
 			});
 
 			if (response.status === 200) {

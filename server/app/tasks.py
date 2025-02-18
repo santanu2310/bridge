@@ -1,33 +1,32 @@
 import asyncio
-import boto3
+import boto3  # type: ignore
 from datetime import datetime
 from bson import ObjectId
-from botocore.exceptions import ClientError
-from botocore.client import Config
-from app.config import (
-    celery_app,
-    SyncMessageCollection,
-    AWS_ACCESS_KEY,
-    AWS_SECRET_KEY,
-    BUCKET_NAME,
-)
-from app.schemas import Message
+from botocore.exceptions import ClientError  # type: ignore
+from botocore.client import Config  # type: ignore
+from app.core.config import create_celery_client, settings
+from app.core.schemas import Message
+from app.core.db import SyncDatabase
 from app.utils import get_file_extension, publish_user_message
+
+celery_app = create_celery_client()
 
 
 @celery_app.task
-def process_media_message(message_id: str):
+def process_media_message(db: SyncDatabase, message_id: str):
     print("started the task...")
     try:
         # Getting the message from message from id and maping it
-        message_response = SyncMessageCollection.find_one({"_id": ObjectId(message_id)})
-        message = Message(**message_response)
+        message_response = db.message.find_one({"_id": ObjectId(message_id)})
+        message = Message.model_validate(message_response)
 
+        if not message.attachment:
+            raise
         # Creating a s3 client
         s3_client = boto3.client(
             "s3",
-            aws_access_key_id=AWS_ACCESS_KEY,
-            aws_secret_access_key=AWS_SECRET_KEY,
+            aws_access_key_id=settings.AWS_ACCESS_KEY,
+            aws_secret_access_key=settings.AWS_SECRET_KEY,
             region_name="ap-south-1",
             config=Config(signature_version="s3v4"),
         )
@@ -38,14 +37,17 @@ def process_media_message(message_id: str):
 
         # Transfereing the data
         s3_client.copy_object(
-            Bucket=BUCKET_NAME,
-            CopySource={"Bucket": BUCKET_NAME, "Key": message.attachment.temp_file_id},
+            Bucket=settings.BUCKET_NAME,
+            CopySource={
+                "Bucket": settings.BUCKET_NAME,
+                "Key": message.attachment.temp_file_id,
+            },
             Key=key,
         )
 
         # Geting the file
         size = s3_client.head_object(
-            Bucket=BUCKET_NAME,
+            Bucket=settings.BUCKET_NAME,
             Key=key,
         ).get("ContentLength", 0)
 
@@ -60,7 +62,7 @@ def process_media_message(message_id: str):
         message.attachment.key = key
 
         # Updating the message in database
-        SyncMessageCollection.update_one(
+        db.message.update_one(
             {"_id": message.id},
             {"$set": {"attachment": message.attachment.model_dump()}},
         )

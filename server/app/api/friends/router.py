@@ -4,28 +4,20 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, status, Path, HTTPException, Body, Query
 from pymongo import ReturnDocument
 
-from ..config import (
-    user_collection,
-    FriendRequestCollection,
-    FriendCollection,
-    ConversationCollection,
-    MessageCollection,
-)
-
-from ..schemas import (
+from app.core.schemas import (
     UserOut,
+    UserAuthOut,
     FriendRequestIn,
     FriendRequestDB,
     Friends_Status,
     FriendRequestOut,
-    Friends,
-    Message,
-    ConversationResponse,
 )
 
-from ..deps import get_user_from_access_token
+from app.core.db import AsyncDatabase, get_async_database
 
-from ..utils import create_friends, get_friends_list
+from app.deps import get_user_from_access_token_http
+
+from .services import create_friends, get_friends_list, are_friends
 
 router = APIRouter()
 
@@ -33,11 +25,11 @@ router = APIRouter()
 @router.post("/make-request", status_code=201)
 async def make_friend_request(
     request_data: Annotated[FriendRequestIn, Body()],
-    user: UserOut = Depends(get_user_from_access_token),
+    user: UserAuthOut = Depends(get_user_from_access_token_http),
+    db: AsyncDatabase = Depends(get_async_database),
 ):
-
     # Finding the requested user by username
-    requested_user = await user_collection.find_one({"username": request_data.username})
+    requested_user = await db.user_auth.find_one({"username": request_data.username})
 
     # If the user is not found return a 404 error
     if not requested_user:
@@ -53,15 +45,13 @@ async def make_friend_request(
         )
 
     # Check if they are already friends
-    if await FriendCollection.find_one(
-        {"user_id": user.id, "friends_id": requested_user["_id"]}
-    ):
+    if await are_friends(db, user.id, requested_user["_id"]):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="You are already friends"
         )
 
     # Check if the friend request already exist
-    if await FriendRequestCollection.find_one(
+    if await db.friends.find_one(
         {"sender_id": user.id, "receiver_id": requested_user["_id"]}
     ):
         raise HTTPException(
@@ -76,23 +66,24 @@ async def make_friend_request(
     )
 
     # Inserting the request into the collection
-    result = FriendRequestCollection.insert_one(
-        request.model_dump(by_alias=True, exclude=["id"])
+    result = db.friend_request.insert_one(
+        request.model_dump(by_alias=True, exclude={"id"})
     )
 
     return
 
 
 @router.get("/get-requests")
-async def list_friend_request(user: UserOut = Depends(get_user_from_access_token)):
+async def list_friend_request(
+    user: UserAuthOut = Depends(get_user_from_access_token_http),
+    db: AsyncDatabase = Depends(get_async_database),
+):
     data = []
 
-    async for document in FriendRequestCollection.find(
+    async for document in db.friend_request.find(
         {"receiver_id": user.id, "status": Friends_Status.pending.value}
     ):
-        sender = await user_collection.find_one(
-            {"_id": ObjectId(document["sender_id"])}
-        )
+        sender = await db.user_auth.find_one({"_id": ObjectId(document["sender_id"])})
         sender_data = UserOut(**sender)
 
         request = FriendRequestOut(
@@ -110,9 +101,10 @@ async def list_friend_request(user: UserOut = Depends(get_user_from_access_token
 @router.patch("/accept-request/{request_id}")
 async def accept_friend_request(
     request_id: Annotated[str, Path(title="Id of the friend request to be accepted")],
-    user: UserOut = Depends(get_user_from_access_token),
+    user: UserAuthOut = Depends(get_user_from_access_token_http),
+    db: AsyncDatabase = Depends(get_async_database),
 ):
-    f_request = await FriendRequestCollection.find_one_and_update(
+    f_request = await db.friends.find_one_and_update(
         {"_id": ObjectId(request_id), "receiver_id": user.id},
         {"$set": {"status": Friends_Status.accepted.value}},
         return_document=ReturnDocument.AFTER,
@@ -124,7 +116,7 @@ async def accept_friend_request(
         )
 
     friend = await create_friends(
-        user1_id=f_request["receiver_id"], user2_id=f_request["sender_id"]
+        db, user1_id=f_request["receiver_id"], user2_id=f_request["sender_id"]
     )
 
     return friend
@@ -132,15 +124,15 @@ async def accept_friend_request(
 
 @router.get("/get-friends")
 async def list_friends(
-    user: UserOut = Depends(get_user_from_access_token),
+    user: UserAuthOut = Depends(get_user_from_access_token_http),
     updated_after: Optional[datetime] = Query(
         None,
         alias="updateAfter",
         description="Return only friends updated after this date (ISO 8601 format)",
     ),
+    db: AsyncDatabase = Depends(get_async_database),
 ):
-
-    friends = await get_friends_list(user.id, updated_after)
+    friends = await get_friends_list(db, user.id, updated_after)
     friend_list = [UserOut(**user) for user in friends]
 
     return friend_list

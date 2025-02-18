@@ -1,37 +1,38 @@
 import json
-from aiokafka import AIOKafkaProducer
+from aiokafka import AIOKafkaProducer  # type: ignore
 from bson import ObjectId
 from typing import Literal, List, Dict
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from pymongo import UpdateOne
-from ..schemas import (
+from app.core.schemas import (
     SyncSocketMessage,
-    UserOut,
     SyncPacket,
     PacketType,
     SyncMessageType,
     MessageStatusUpdate,
     Message_Status,
+    UserAuthOut,
 )
-from ..deps import get_user_from_access_token
-from ..config import KAFKA_CONNECTION, MessageCollection
+from app.deps import get_user_from_access_token_ws
+from app.core.config import settings
+from app.core.db import AsyncDatabase, get_async_database_from_socket
 
 router = APIRouter()
 
 
 class ConnectionManager:
-    def __init__(self):
+    def __init__(self) -> None:
         self.active_connection: Dict[ObjectId, WebSocket] = {}
 
     async def connect(self, user_id: ObjectId, websocket: WebSocket):
         await websocket.accept()
         self.active_connection[user_id] = websocket
-        await notify_online_status(user_id, "online")
+        # await notify_online_status(user_id, "online")
 
     async def disconnect(self, user_id: ObjectId):
         if user_id in self.active_connection:
             del self.active_connection[user_id]
-            await notify_online_status(user_id, "offline")
+            # await notify_online_status(user_id, "offline")
 
     def is_online(self, user_id: ObjectId):
         return user_id in self.active_connection
@@ -44,33 +45,37 @@ class ConnectionManager:
 connections = ConnectionManager()
 
 
-@router.websocket("/socket")
+@router.websocket("/")
 async def websocket_endpoint(
-    websocket: WebSocket, user: UserOut = Depends(get_user_from_access_token)
+    websocket: WebSocket,
+    user: UserAuthOut = Depends(get_user_from_access_token_ws),
+    db: AsyncDatabase = Depends(get_async_database_from_socket),
 ):
     await connections.connect(user.id, websocket)
 
     try:
         while True:
             data = await websocket.receive_text()
-            data = json.loads(data)
-            if data["type"] == "ping":
+            packet: SyncPacket = SyncPacket.model_validate_json(data)
+            if packet.type == PacketType.ping:
                 await connections.send_personal_message(
-                    user_id=user.id, message=SyncPacket(packet_type="pong")
+                    user_id=user.id, message=SyncPacket(type=PacketType.pong)
                 )
-            else:
-                await handle_recieved_message(user_id=user.id, message=data["data"])
+            elif packet.type == PacketType.message and packet.data:
+                await handle_recieved_message(db, user_id=user.id, message=packet.data)
 
     except WebSocketDisconnect:
         await connections.disconnect(user.id)
     return
 
 
-async def handle_recieved_message(user_id: ObjectId, message: SyncSocketMessage):
-    if message["type"] == SyncMessageType.message_status:
+async def handle_recieved_message(
+    db: AsyncDatabase, user_id: ObjectId, message: SyncSocketMessage
+):
+    if message.type == SyncMessageType.message_status:
         try:
             # Parse the incoming message data into a structured model
-            message = MessageStatusUpdate(**message)
+            message = MessageStatusUpdate.model_validate(message.model_dump())
             message_status = message.status.value
 
             # Determine the correct field to update in the database
@@ -95,7 +100,7 @@ async def handle_recieved_message(user_id: ObjectId, message: SyncSocketMessage)
 
             # Only proceed with the database update if there are updates to make
             if updates:
-                await MessageCollection.bulk_write(updates)
+                await db.message.bulk_write(updates)
         except Exception as e:
             print(e)
 
@@ -112,16 +117,16 @@ async def send_message(user_ids: List[ObjectId], message_data: SyncSocketMessage
     try:
         for user_id in user_ids:
             if connections.is_online(user_id):
-                data_packet = SyncPacket(
-                    packet_type=PacketType.message, data=message_data
-                )
+                data_packet = SyncPacket(type=PacketType.message, data=message_data)
 
                 await connections.send_personal_message(user_id, data_packet)
     except Exception as e:
         print(e)
 
 
-async def notify_online_status(user_id: str, is_online: Literal["online", "offline"]):
+async def notify_online_status(
+    user_id: ObjectId, is_online: Literal["online", "offline"]
+):
     """
     Notify Kafka about the online status of a user.
 
@@ -142,7 +147,7 @@ async def notify_online_status(user_id: str, is_online: Literal["online", "offli
         Prints an error message if the message could not be published to Kafka.
     """
     try:
-        producer = AIOKafkaProducer(bootstrap_servers=KAFKA_CONNECTION)
+        producer = AIOKafkaProducer(bootstrap_servers=settings.KAFKA_CONNECTION)
         await producer.start()
 
         message = {"user_id": str(user_id), "status": is_online}
