@@ -12,9 +12,19 @@ from app.core.schemas import (
     MessageStatusUpdate,
     MessageNoAlias,
     Message,
+    FriendRequestDB,
+    UserBrief,
+    FriendRequestMessage,
+    SyncMessageType,
 )
-from app.core.db import AsyncDatabase
+from app.core.db import (
+    AsyncDatabase,
+    create_async_client,
+    AsyncIOMotorClient,
+    AsyncDatabase,
+)
 from app.api.msg_socket.services import get_user_form_conversation
+from app.api.user.services import get_full_user
 
 
 async def watch_user_updates(db: AsyncDatabase):
@@ -171,3 +181,50 @@ async def distribute_published_messages():
             await consumer.stop()
             print("Reconnecting in 5 sec")
             asyncio.sleep(5)
+
+
+async def watch_friend_requests():
+    """
+    Watches for updates in the MessageCollection and sends message status updates
+    to the sender when the message status changes.
+    """
+    client = create_async_client()
+    db = AsyncDatabase(client, settings.DATABASE_NAME)
+    print("task created watch friend requests")
+
+    try:
+        async with db.friend_request.watch(
+            pipeline=[{"$match": {"operationType": "insert"}}],
+            full_document="updateLookup",
+        ) as stream:
+            async for change in stream:
+                print(change)
+                try:
+                    friend_request = FriendRequestDB.model_validate(
+                        change["fullDocument"]
+                    )
+
+                    full_user = await get_full_user(
+                        db=db, user_id=friend_request.sender_id
+                    )
+                    user_brief = UserBrief.model_validate(full_user.model_dump())
+
+                    message = FriendRequestMessage(
+                        type=SyncMessageType.friend_request,
+                        id=str(friend_request.id),
+                        message=friend_request.message,
+                        user=user_brief,
+                        status=friend_request.status,
+                        created_time=friend_request.created_at,
+                    )
+
+                    # Send the status update to the message sender
+                    await send_sync_message(
+                        user_ids=[friend_request.receiver_id],
+                        message_data=message,
+                    )
+
+                except Exception as e:
+                    print(f"Error processing user update : {e}")
+    finally:
+        client.close()

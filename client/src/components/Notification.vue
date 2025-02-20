@@ -1,19 +1,50 @@
 <script setup lang="ts">
-	import { ref } from "vue";
-	import axios from "axios";
+	import { useAuthStore } from "@/stores/auth";
+	import { useFriendStore } from "@/stores/friend";
+	import { mapResponseToUser } from "@/types/User";
+
+	const authStore = useAuthStore();
+	const friendStore = useFriendStore();
 
 	async function acceptRequest(request_id: string) {
-		console.log(request_id);
 		try {
-			const response = await axios({
+			const response = await authStore.authAxios({
 				method: "patch",
-				url: `http://localhost:8000/friends/accept-request/${request_id}`,
-				withCredentials: true,
+				url: `friends/accept-request/${request_id}`,
 			});
 			console.log(response.status);
 
 			if (response.status === 200) {
 				console.log(response.data);
+
+				friendStore.friendRequests = friendStore.friendRequests.filter(
+					(request) => request.id === request_id
+				);
+
+				const user_response = await authStore.authAxios({
+					method: "get",
+					url: `/ger-friend/${request_id}`,
+				});
+				if (user_response.status === 200) {
+					const friend = mapResponseToUser(user_response.data);
+					friendStore.addFriend(friend);
+				}
+			}
+		} catch (error) {
+			console.error(error);
+		}
+	}
+	async function rejectRequest(request_id: string) {
+		try {
+			const response = await authStore.authAxios({
+				method: "patch",
+				url: `friends/reject-request/${request_id}`,
+			});
+
+			if (response.status === 200) {
+				friendStore.friendRequests = friendStore.friendRequests.filter(
+					(request) => request.id != request_id
+				);
 			}
 		} catch (error) {
 			console.error(error);
@@ -47,7 +78,9 @@
 				<button class="accept-btn" @click="acceptRequest(id)">
 					Accept
 				</button>
-				<button class="reject-btn">Decline</button>
+				<button class="reject-btn" @click="rejectRequest(id)">
+					Decline
+				</button>
 			</div>
 		</div>
 	</div>

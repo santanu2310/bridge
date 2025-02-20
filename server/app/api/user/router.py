@@ -137,4 +137,5 @@ async def update_user_data(
     user: UserAuthOut = Depends(get_user_from_access_token_http),
     db: AsyncDatabase = Depends(get_async_database),
 ):
-    return update_user_profile(db, data, user.id)
+    print(data)
+    return await update_user_profile(db, data, user.id)

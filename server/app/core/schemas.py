@@ -67,18 +67,6 @@ class FileType(str, Enum):
     attachment = "attachment"
 
 
-# class User(BaseModel):
-#     id: Optional[PyObjectId] = Field(alias="_id", default=None)
-#     username: str
-#     full_name: str | None = None
-#     email: EmailStr
-#     password: str | None = None
-#     bio: str | None = None
-#     profile_picture: str | None = None
-#     created_at: datetime = Field(default_factory=datetime.utcnow)
-#     hashing_salt: str | None = None
-
-
 class UserAuth(BaseModel):
     id: Optional[PyObjectId] = Field(validation_alias="_id", default=None)
     username: str
@@ -113,6 +101,14 @@ class UserRegistration(BaseModel):
     password: str
 
 
+class UserBrief(BaseModel):
+    id: PyObjectId
+    username: str
+    full_name: str
+    bio: str | None = None
+    profile_picture: str | None = None
+
+
 class UserOut(BaseModel):
     id: PyObjectId = Field(alias="_id", serialization_alias="id")
     username: str
@@ -126,6 +122,7 @@ class UserOut(BaseModel):
 
 
 class UpdatebleUser(BaseModel):
+    full_name: str | None = None
     bio: str | None = None
     profile_picture: str | None = None
     banner_picture: Optional[FileUrl] = None
@@ -135,7 +132,7 @@ class UpdatebleUser(BaseModel):
 class Friends(BaseModel):
     id: Optional[PyObjectId] = Field(alias="_id", default=None)
     user_id: PyObjectId
-    friends_id: PyObjectId
+    friend_id: PyObjectId
     update_at: datetime = Field(default_factory=datetime.utcnow)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -157,7 +154,7 @@ class FriendRequestDB(BaseModel):
 
 class FriendRequestOut(BaseModel):
     id: str
-    user: UserOut
+    user: UserBrief
     message: str | None
     status: Friends_Status
     created_time: datetime
@@ -250,8 +247,8 @@ class FriendUpdateMessage(BaseMessage):
 
 class FriendRequestMessage(BaseMessage):
     type: str = SyncMessageType.friend_request.value
-    request_id: str
-    user: UserOut
+    id: str
+    user: UserBrief
     message: Optional[str]
     status: Friends_Status
     created_time: datetime

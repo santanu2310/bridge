@@ -24,7 +24,7 @@
 			try {
 				const response = await axios({
 					method: "patch",
-					url: "http://localhost:8000/user/update",
+					url: "http://localhost:8000/users/update",
 					data: {
 						[props.d_key]: userData.value,
 					},

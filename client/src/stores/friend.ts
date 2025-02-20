@@ -7,9 +7,11 @@ import { mapResponseToUser, type User } from "@/types/User";
 import { useUserStore } from "./user";
 import type { Conversation } from "@/types/Conversation";
 import { mapResponseToMessage, type Message } from "@/types/Message";
+import type { FriendRequest, UserBrief } from "@/types/Commons";
 
 export const useFriendStore = defineStore("friend", () => {
-	const friends = ref<User[]>();
+	const friends = ref<User[]>([]);
+	const friendRequests = ref<FriendRequest[]>([]);
 
 	const lastFriendsUpdate = localStorage.getItem("lastUpdated");
 
@@ -42,9 +44,11 @@ export const useFriendStore = defineStore("friend", () => {
 			});
 
 			if (response.status === 200) {
+				console.log(response.data);
 				const updatedFriend: User[] = await Promise.all(
 					response.data.map(async (data: object) => {
 						const user = mapResponseToUser(data);
+						friends.value.push(user);
 						await indexedDbService.updateRecord("friends", user);
 
 						return user;
@@ -63,7 +67,13 @@ export const useFriendStore = defineStore("friend", () => {
 					});
 				}
 
-				localStorage.setItem("lastUpdated", new Date().toISOString());
+				if (updatedFriend.length > 0) {
+					console.log("data is there");
+					localStorage.setItem(
+						"lastUpdated",
+						new Date().toISOString()
+					);
+				}
 			}
 
 			friends.value.sort((a, b) => {
@@ -158,5 +168,30 @@ export const useFriendStore = defineStore("friend", () => {
 		}
 	}
 
-	return { friends, getConversation, listFriend, getInitialOnlineStatus };
+	async function addFriend(friend: User) {
+		await indexedDbService.addRecord("friends", friend);
+		friends.value.push(friend);
+	}
+
+	async function getPendingFriendRequests() {
+		const response = await authStore.authAxios({
+			method: "get",
+			url: "friends/get-requests",
+		});
+
+		if (response.status === 200) {
+			friendRequests.value.push(...response.data);
+			console.log(response.data);
+		}
+	}
+
+	return {
+		friends,
+		friendRequests,
+		getConversation,
+		listFriend,
+		getInitialOnlineStatus,
+		addFriend,
+		getPendingFriendRequests,
+	};
 });

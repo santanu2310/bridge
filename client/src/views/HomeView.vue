@@ -10,7 +10,7 @@
 	import Chats from "@/containers/Chats.vue";
 	import Friends from "@/containers/Friends.vue";
 	import Profile from "@/containers/Profile.vue";
-	import Notification from "@/containers/Notification.vue";
+	import FriendRequests from "@/containers/FriendRequests.vue";
 	import Settings from "@/containers/Settings.vue";
 	import Conversation from "@/containers/Conversation.vue";
 
@@ -36,6 +36,7 @@
 		await syncStore.syncMessageStatus();
 		await friendStore.listFriend();
 		await friendStore.getInitialOnlineStatus();
+		await friendStore.getPendingFriendRequests();
 	});
 </script>
 
@@ -67,12 +68,12 @@
 				</div>
 			</div>
 			<div class="w-full h-auto aspect-square flex flex-col items-center">
-				<div
+				<!-- <div
 					class="w-full h-auto aspect-icon mt-2 flex items-center justify-center cursor-pointer"
 					@click="leftContent = 'notification'"
 				>
 					<IconBell :size="35" />
-				</div>
+				</div> -->
 				<div
 					class="w-1/2 h-auto aspect-square mt-3 mb-4 overflow-hidden object-cover rounded-full cursor-pointer"
 					@click="leftContent = 'profile'"
@@ -87,12 +88,18 @@
 		</div>
 		<div class="left-sidebar w-96 h-full">
 			<Chats v-if="leftContent == 'chats'" />
-			<Friends v-if="leftContent == 'friends'" />
+			<Friends
+				v-if="leftContent == 'friends'"
+				@freind-request="leftContent = 'notification'"
+			/>
 			<Profile
 				v-if="leftContent == 'profile'"
 				@switch-container="switchContainer"
 			/>
-			<Notification v-if="leftContent == 'notification'" />
+			<FriendRequests
+				v-if="leftContent == 'notification'"
+				@friends="leftContent = 'friends'"
+			/>
 			<Settings v-if="leftContent == 'settings'" />
 		</div>
 		<div class="message">

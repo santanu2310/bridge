@@ -77,17 +77,19 @@ async def update_user_profile(
     db: AsyncDatabase, data: UpdatebleUser, user_id: ObjectId
 ):
     cleaned_data = data.model_dump(exclude_none=True, exclude={"created_at"})
-
+    print(f"{cleaned_data=}")
     if not cleaned_data:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="No data to update"
         )
 
     user_data = await db.user_profile.find_one_and_update(
-        {"_id": ObjectId(user_id)},
+        {"auth_id": ObjectId(user_id)},
         update={"$set": cleaned_data},
         return_document=ReturnDocument.AFTER,
     )
+
+    print(f"{user_data=}")
 
     if not user_data:
         raise HTTPException(

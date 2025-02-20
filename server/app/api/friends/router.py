@@ -6,6 +6,7 @@ from pymongo import ReturnDocument
 
 from app.core.schemas import (
     UserOut,
+    UserBrief,
     UserAuthOut,
     FriendRequestIn,
     FriendRequestDB,
@@ -14,10 +15,16 @@ from app.core.schemas import (
 )
 
 from app.core.db import AsyncDatabase, get_async_database
-
+from app.api.user.services import get_full_user
 from app.deps import get_user_from_access_token_http
 
-from .services import create_friends, get_friends_list, are_friends
+from .services import (
+    create_friends,
+    get_friends_list,
+    are_friends,
+    reject_friend_request,
+    _get_friend,
+)
 
 router = APIRouter()
 
@@ -43,7 +50,6 @@ async def make_friend_request(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="cannot make request to this username",
         )
-
     # Check if they are already friends
     if await are_friends(db, user.id, requested_user["_id"]):
         raise HTTPException(
@@ -51,8 +57,12 @@ async def make_friend_request(
         )
 
     # Check if the friend request already exist
-    if await db.friends.find_one(
-        {"sender_id": user.id, "receiver_id": requested_user["_id"]}
+    if await db.friend_request.find_one(
+        {
+            "sender_id": user.id,
+            "receiver_id": requested_user["_id"],
+            "status": Friends_Status.pending.value,
+        }
     ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Friend request already exist"
@@ -83,8 +93,8 @@ async def list_friend_request(
     async for document in db.friend_request.find(
         {"receiver_id": user.id, "status": Friends_Status.pending.value}
     ):
-        sender = await db.user_auth.find_one({"_id": ObjectId(document["sender_id"])})
-        sender_data = UserOut(**sender)
+        sender = await get_full_user(db, ObjectId(document["sender_id"]))
+        sender_data = UserBrief.model_validate(sender.model_dump())
 
         request = FriendRequestOut(
             id=str(document["_id"]),
@@ -104,8 +114,12 @@ async def accept_friend_request(
     user: UserAuthOut = Depends(get_user_from_access_token_http),
     db: AsyncDatabase = Depends(get_async_database),
 ):
-    f_request = await db.friends.find_one_and_update(
-        {"_id": ObjectId(request_id), "receiver_id": user.id},
+    f_request = await db.friend_request.find_one_and_update(
+        {
+            "_id": ObjectId(request_id),
+            "receiver_id": user.id,
+            "status": Friends_Status.pending.value,
+        },
         {"$set": {"status": Friends_Status.accepted.value}},
         return_document=ReturnDocument.AFTER,
     )
@@ -122,6 +136,17 @@ async def accept_friend_request(
     return friend
 
 
+@router.patch("/reject-request/{request_id}")
+async def reject_request(
+    request_id: Annotated[str, Path(title="Id of the friend request to be accepted")],
+    user: UserAuthOut = Depends(get_user_from_access_token_http),
+    db: AsyncDatabase = Depends(get_async_database),
+):
+    return await reject_friend_request(
+        db=db, id=ObjectId(request_id), receiver_id=user.id
+    )
+
+
 @router.get("/get-friends")
 async def list_friends(
     user: UserAuthOut = Depends(get_user_from_access_token_http),
@@ -136,3 +161,12 @@ async def list_friends(
     friend_list = [UserOut(**user) for user in friends]
 
     return friend_list
+
+
+@router.get("/ger-friend/{id}")
+async def get_friend(
+    id: Annotated[str, Path(title="Id of the friend")],
+    user: UserAuthOut = Depends(get_user_from_access_token_http),
+    db: AsyncDatabase = Depends(get_async_database),
+):
+    return await _get_friend(db=db, user_id=user.id, friend_id=ObjectId(id))

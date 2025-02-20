@@ -12,6 +12,7 @@ from app.background_tasks import (
     handle_online_status_update,
     watch_message_updates,
     distribute_published_messages,
+    watch_friend_requests,
 )
 
 from app.core.db import (
@@ -31,16 +32,20 @@ class State(TypedDict):
 
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[State]:
+    asyncio.create_task(watch_friend_requests())
+
     async with create_kafka_producer() as kafka_producer:
         async_cleint = create_async_client()
         sync_client = create_sync_client()
 
+        print("Lifespan yield: resources ready")
         yield {
             "async_db": AsyncDatabase(async_cleint, settings.DATABASE_NAME),
             "sync_db": SyncDatabase(sync_client, settings.DATABASE_NAME),
             "kafka_producer": kafka_producer,
         }
 
+        print("Lifespan shutdown: closing resources")
         async_cleint.close()
         sync_client.close()
 
@@ -66,10 +71,16 @@ def create_app() -> FastAPI:
 app = create_app()
 
 
+# @app.on_event("startup")
+# async def run_background_task():
+#     asyncio.create_task(watch_friend_requests())
+#     # asyncio.create_task(watch_user_updates())
+#     # asyncio.create_task(handle_online_status_update())
+#     # asyncio.create_task(watch_message_updates())
+#     # asyncio.create_task(distribute_published_messages())
+
+
 @app.on_event("startup")
 async def run_background_task():
-    ...
-    # asyncio.create_task(watch_user_updates())
-    # asyncio.create_task(handle_online_status_update())
-    # asyncio.create_task(watch_message_updates())
-    # asyncio.create_task(distribute_published_messages())
+    print("Startup event triggered")
+    asyncio.create_task(watch_friend_requests())

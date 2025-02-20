@@ -12,6 +12,7 @@ import {
 import { indexedDbService } from "@/services/indexDbServices";
 import { useUserStore } from "./user";
 import { useAuthStore } from "./auth";
+import { useFriendStore } from "./friend";
 import { updateMessageInState } from "@/utils/MessageUtils";
 
 interface ConvResponse {
@@ -26,6 +27,7 @@ interface ConvResponse {
 export const useSyncStore = defineStore("background_sync", () => {
 	const userStore = useUserStore();
 	const authStore = useAuthStore();
+	const friendStore = useFriendStore();
 
 	const { isOnline, setOnline, setOffline } =
 		userStore.useOnlineStatusManager();
@@ -73,6 +75,10 @@ export const useSyncStore = defineStore("background_sync", () => {
 			case "friend_request":
 				console.log("friend_request");
 				console.log(msg);
+				delete msg.last;
+
+				console.log(msg);
+				friendStore.friendRequests.push(msg);
 				break;
 		}
 	});

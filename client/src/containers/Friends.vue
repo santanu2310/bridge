@@ -1,16 +1,18 @@
 <script setup lang="ts">
 	import { ref } from "vue";
 	import type { Ref } from "vue";
-	import axios from "axios";
 	import { useFriendStore } from "@/stores/friend";
+	import { useAuthStore } from "@/stores/auth";
 	import Friend from "@/components/Friend.vue";
+	import IconBell from "@/components/icons/IconBell.vue";
 
-	// const userStore = useUserStore();
-	// const messageStore = useMessageStore();
 	const friendStore = useFriendStore();
+	const authStore = useAuthStore();
 	const request_prompt = ref(false);
 	const username: Ref<string | null> = ref(null);
 	const message: Ref<string | null> = ref(null);
+
+	const emit = defineEmits(["freindRequest"]);
 
 	const currentInitial = ref("");
 	function changedInitial(name: string): boolean {
@@ -23,14 +25,13 @@
 
 	async function createFriendRequest() {
 		try {
-			const response = await axios({
+			const response = await authStore.authAxios({
 				method: "post",
-				url: "http://localhost:8000/friends/make-request",
+				url: "friends/make-request",
 				data: {
 					username: username.value,
 					message: message.value,
 				},
-				withCredentials: true,
 			});
 
 			if (response.status === 201) {
@@ -46,9 +47,15 @@
 	<div class="">
 		<div class="w-ful p-6 flex items-center justify-between">
 			<span class="font-medium text-xl">Friends</span>
-			<div class="flex">
+			<div class="h-8 flex">
 				<button
-					class="btn-bg w-8 h-8 rounded"
+					class="h-full aspect-square mr-3 flex items-center justify-center"
+					@click="emit('freindRequest')"
+				>
+					<IconBell :size="55" />
+				</button>
+				<button
+					class="h-full aspect-square rounded bg-color-background-mute text-primary"
 					@click="request_prompt = true"
 				>
 					+
@@ -174,7 +181,7 @@
 		color: var(--color-text-soft);
 	}
 
-	button {
+	/* button {
 		background: var(--primary);
 		color: var(--vt-c-white-soft);
 		transition: 200ms;
@@ -183,5 +190,5 @@
 	button:hover {
 		color: var(--primary);
 		background: var(--color-background);
-	}
+	} */
 </style>
