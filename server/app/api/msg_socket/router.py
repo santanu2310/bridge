@@ -85,7 +85,7 @@ async def handle_recieved_message(
 
         # check if the users are friend or not
         friend = await db.friends.find_one(
-            {"user_id": user_id, "friends_id": ObjectId(data.receiver_id)}
+            {"user_id": user_id, "friend_id": ObjectId(data.receiver_id)}
         )
 
         if not friend:
@@ -108,7 +108,7 @@ async def handle_recieved_message(
             conversation_resp = await db.conversation.insert_one(
                 conv_data.model_dump(exclude={"id"})
             )
-            data.conversation_id = str(conversation_resp)
+            data.conversation_id = str(conversation_resp.inserted_id)
 
     # create a Message instance
     message_data = Message(

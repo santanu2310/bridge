@@ -168,9 +168,17 @@ export const useFriendStore = defineStore("friend", () => {
 		}
 	}
 
-	async function addFriend(friend: User) {
-		await indexedDbService.addRecord("friends", friend);
-		friends.value.push(friend);
+	async function addFriend(document_id: string) {
+		const user_response = await authStore.authAxios({
+			method: "get",
+			url: `friends/ger-friend/${document_id}`,
+		});
+		if (user_response.status === 200) {
+			const friend = mapResponseToUser(user_response.data);
+
+			await indexedDbService.addRecord("friends", friend);
+			friends.value.push(friend);
+		}
 	}
 
 	async function getPendingFriendRequests() {

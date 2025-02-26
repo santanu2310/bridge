@@ -57,6 +57,7 @@ class SyncMessageType(str, Enum):
     online_status = "online_status"
     friend_update = "friend_update"
     friend_request = "friend_request"
+    add_friend = "add_friend"
 
 
 class FileType(str, Enum):
@@ -254,9 +255,18 @@ class FriendRequestMessage(BaseMessage):
     created_time: datetime
 
 
+class AddFriendMessage(BaseMessage):
+    type: str = SyncMessageType.add_friend.value
+    freind_doc_id: PyObjectId
+
+
 # Combined Message Model for Websocket Handeling
 SyncSocketMessage = Union[
-    OnlineStatusMessage, FriendUpdateMessage, FriendRequestMessage, MessageStatusUpdate
+    OnlineStatusMessage,
+    FriendUpdateMessage,
+    FriendRequestMessage,
+    MessageStatusUpdate,
+    AddFriendMessage,
 ]
 
 

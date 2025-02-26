@@ -8,7 +8,12 @@ from botocore.exceptions import ClientError  # type: ignore
 from fastapi import APIRouter, Depends, status, Body, HTTPException, Query
 
 from app.core.config import settings
-from app.core.db import AsyncDatabase, get_async_database
+from app.core.db import (
+    AsyncDatabase,
+    get_async_database,
+    SyncDatabase,
+    get_sync_database,
+)
 from app.deps import get_user_from_access_token_http
 from app.core.schemas import (
     UserAuthOut,
@@ -71,6 +76,7 @@ async def create_presigned_post(
         region_name="ap-south-1",
         config=Config(signature_version="s3v4"),
     )
+
     try:
         response = s3_client.generate_presigned_post(
             settings.BUCKET_NAME,
@@ -80,7 +86,7 @@ async def create_presigned_post(
         )
 
     except ClientError as e:
-        print(e)
+        print(f"{e=}")
         return None
 
     # The response contains the presigned URL and required fields

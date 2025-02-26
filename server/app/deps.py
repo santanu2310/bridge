@@ -85,14 +85,14 @@ async def _get_user_from_access_token(
 
 
 async def get_user_from_access_token_http(
-    access_token: Annotated[str, Cookie(alias="refresh_t")],
+    access_token: Annotated[str, Cookie(alias="access_t")],
     db: AsyncDatabase = Depends(get_async_database),
 ) -> UserAuthOut:
     return await _get_user_from_access_token(access_token=access_token, db=db)
 
 
 async def get_user_from_access_token_ws(
-    access_token: Annotated[str, Cookie(alias="refresh_t")],
+    access_token: Annotated[str, Cookie(alias="access_t")],
     db: AsyncDatabase = Depends(get_async_database_from_socket),
 ) -> UserAuthOut:
     return await _get_user_from_access_token(access_token=access_token, db=db)

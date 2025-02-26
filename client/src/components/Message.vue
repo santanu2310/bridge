@@ -1,11 +1,14 @@
 <script setup lang="ts">
+	import { ref } from "vue";
 	import { vElementVisibility } from "@vueuse/components";
 	import type { Message } from "@/types/Message";
+	import { FileStatus } from "@/types/Commons";
 	import { useSyncStore } from "@/stores/background_sync";
 	import { useMessageStore } from "@/stores/message";
 	import IconDoubleTick from "./icons/IconDoubleTick.vue";
 	import IconAdd from "./icons/IconAdd.vue";
 	import IconDownload from "./icons/IconDownload.vue";
+	import IconUpload from "./icons/IconUpload.vue";
 	import IconClock from "./icons/IconClock.vue";
 	import { formatFileSize } from "@/utils/StringUtils";
 
@@ -19,6 +22,36 @@
 
 	const props = defineProps<Props>();
 	const messageDate = new Date(props.message.sendingTime as string);
+	const fileState = ref<FileStatus>(FileStatus.unsucessfull);
+
+	const uploadEmitter = messageStore.uploadEmitter;
+
+	if (props.message.status != "pending")
+		fileState.value = FileStatus.successfull;
+
+	uploadEmitter.on("uploadPreprocessing", (id: string) => {
+		if (id == props.message.id) {
+			fileState.value = FileStatus.preProcessing;
+		}
+	});
+	uploadEmitter.on(
+		"uploadProgress",
+		(id: string, percentCompleted: number) => {
+			if (id == props.message.id) {
+				fileState.value = FileStatus.uploading;
+			}
+		}
+	);
+	uploadEmitter.on("uploadPostProcessing", (id: string) => {
+		if (id == props.message.id) {
+			fileState.value = FileStatus.postProcessing;
+		}
+	});
+	uploadEmitter.on("uploadError", (id: string) => {
+		if (id == props.message.id) {
+			fileState.value = FileStatus.unsucessfull;
+		}
+	});
 
 	function onElementVisibility(state: boolean) {
 		// This function will trigger when message is visible in the screen
@@ -47,7 +80,7 @@
 					<IconAdd :size="60" />
 				</div>
 				<div class="ml-2 flex flex-grow flex-col">
-					<span class="w-auto text-sm font-normal">{{
+					<span class="w-auto text-sm font-normal break-all">{{
 						message.attachment.name
 					}}</span>
 					<span class="mt-1 text-xxs font-extralight">{{
@@ -57,11 +90,35 @@
 			</div>
 
 			<button
-				class="h-10 aspect-square flex justify-center items-center"
+				class="h-10 aspect-square ml-3 flex justify-center items-center"
 				@click="messageStore.downloadFile(message.attachment)"
+				v-if="message.status != 'pending'"
 			>
 				<IconDownload />
 			</button>
+			<div class="" v-else>
+				<button
+					class="h-10 aspect-square ml-3 flex justify-center items-center"
+					@click="messageStore.sendMessageWithFile(message)"
+					v-if="fileState == FileStatus.unsucessfull"
+				>
+					<IconUpload />
+				</button>
+				<button
+					class="h-10 aspect-square ml-3 flex justify-center items-center"
+					@click="console.log('postProcessing')"
+					v-else-if="fileState == FileStatus.uploading"
+				>
+					<IconLoading :progress="80" />
+				</button>
+				<button
+					class="h-10 aspect-square ml-3 flex justify-center items-center"
+					@click="console.log('preProcessing/uploading')"
+					v-else
+				>
+					<IconBuffer />
+				</button>
+			</div>
 		</div>
 		<div class="w-full flex flex-nowrap items-end">
 			<div class="w-auto mx-1 flex-grow">

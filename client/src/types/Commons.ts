@@ -31,3 +31,16 @@ export interface FriendRequest {
 	status: string;
 	created_time: string;
 }
+
+export enum FileStatus {
+	preProcessing = "preProcessing",
+	uploading = "uploading",
+	postProcessing = "postProcessing",
+	successfull = "successfull",
+	unsucessfull = "unsucessfull",
+}
+
+export interface TempFile {
+	id: string;
+	file: File;
+}

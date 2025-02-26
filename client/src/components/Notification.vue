@@ -21,14 +21,7 @@
 					(request) => request.id === request_id
 				);
 
-				const user_response = await authStore.authAxios({
-					method: "get",
-					url: `/ger-friend/${request_id}`,
-				});
-				if (user_response.status === 200) {
-					const friend = mapResponseToUser(user_response.data);
-					friendStore.addFriend(friend);
-				}
+				friendStore.addFriend(response.data.friendship_document_id);
 			}
 		} catch (error) {
 			console.error(error);

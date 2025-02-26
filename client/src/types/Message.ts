@@ -1,7 +1,7 @@
 export interface Message {
-	id: string | null;
+	id: string;
 	conversationId: string | null;
-	senderId: string | null;
+	senderId: string;
 	receiverId: string | null;
 	message: string | null;
 	attachment: FileInfo | null;
@@ -42,21 +42,23 @@ export function mapResponseToMessage(response: object): Message {
 	for (const [key, path] of Object.entries(mapping)) {
 		const value = (response as { [key: string]: any })[path];
 		if (value) {
-			if (key == "attachment") {
-				message["attachment"] = value
-					? ({
-							type: value.type,
-							name: value.name,
-							key: value.key,
-							tempFileId: value.temp_fileId,
-							size: value.size,
-					  } as FileInfo)
-					: null;
+			if (key == "attachment" && typeof value === "object") {
+				message.attachment = {
+					type: value.type as FileType,
+					name: value.name,
+					key: value.key,
+					tempFileId: value.temp_fileId,
+					size: value.size,
+				} as FileInfo;
 			} else {
 				message[key as keyof Message] = value;
 			}
 		} else {
-			message[key as keyof Message] = null;
+			if (key === "id" || key === "senderId") {
+				console.error(`Missing required value for key: ${key}`);
+			} else
+				message[key as keyof Message] =
+					key === "attachment" ? (null as any) : null;
 		}
 	}
 

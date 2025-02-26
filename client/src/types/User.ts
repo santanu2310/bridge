@@ -1,10 +1,11 @@
 export interface User {
-	id: string | null;
-	userName: string | null;
-	fullName: string | null;
-	email: string | null;
+	id: string;
+	userName: string;
+	fullName: string;
+	email: string;
 	bio: string | null;
 	profilePicUrl: string | null;
+	location: string | null;
 	joinedDate: string | null;
 }
 
@@ -15,6 +16,7 @@ export function mapResponseToUser(response: object): User {
 		fullName: "full_name",
 		email: "email",
 		bio: "bio",
+		location: "location",
 		profilePicUrl: "profile_picture",
 		joinedDate: "created_at",
 	};
@@ -23,10 +25,14 @@ export function mapResponseToUser(response: object): User {
 
 	for (const [key, path] of Object.entries(mapping)) {
 		const value = (response as { [key: string]: any })[path];
-		if (value !== undefined) {
+		if (value) {
 			user[key as keyof User] = value;
 		} else {
-			user[key as keyof User] = null;
+			if (["id", "userName", "fullName", "email"].includes(key)) {
+				throw new Error(`Missing required value for key: ${key}`);
+			}
+			// user[key as keyof User] = null;
+			else (user as any)[key] = null;
 		}
 	}
 

@@ -21,6 +21,7 @@
 	import IconSend from "@/components/icons/IconSend.vue";
 	import IconClose from "@/components/icons/IconClose.vue";
 	import Message from "@/components/Message.vue";
+	import type { Message as MessageType } from "@/types/Message";
 
 	const messageStore = useMessageStore();
 	const userStore = useUserStore();
@@ -95,12 +96,19 @@
 
 	async function sendMessage() {
 		if (selectedFile.value) {
-			messageStore.sendMessageWithFile(
-				selectedFile.value,
-				text.value,
-				userStore.currentConversation!.receiverId,
-				userStore.currentConversation!.convId
-			);
+			const messageData: MessageType = {
+				id: crypto.randomUUID(),
+				senderId: userStore.user.id,
+				receiverId: userStore.currentConversation?.receiverId ?? null,
+				conversationId: userStore.currentConversation?.convId ?? null,
+				message: text.value,
+				attachment: null,
+				sendingTime: new Date().toISOString(),
+				status: "pending",
+				receivedTime: null,
+				seenTime: null,
+			};
+			messageStore.sendMessageWithFile(messageData, selectedFile.value);
 		} else {
 			if (text.value != "") {
 				messageStore.sendMessage(text.value);
@@ -147,16 +155,19 @@
 			<div class="h-fit flex items-center">
 				<button
 					class="h-8 mx-2 aspect-square bg-transparent border-none flex items-center justify-center"
+					disabled
 				>
 					<IconSearch />
 				</button>
 				<button
 					class="h-8 mx-2 aspect-square bg-transparent border-none flex items-center justify-center"
+					disabled
 				>
 					<IconCall />
 				</button>
 				<button
 					class="h-8 mx-2 aspect-square bg-transparent border-none flex items-center justify-center"
+					disabled
 				>
 					<IconVideoCall />
 				</button>
@@ -251,7 +262,7 @@
 					type="text"
 					v-model="text"
 					placeholder="Type your message ..."
-					@keyup.enter="sendMessage()"
+					@keyup.enter="sendMessage(), removeSelectedFile()"
 				/>
 			</div>
 			<button

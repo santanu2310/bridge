@@ -1,5 +1,4 @@
 import { defineStore } from "pinia";
-import axios from "axios";
 import { Socket } from "@/services/socektServices";
 import { type Conversation } from "@/types/Conversation";
 import { mapResponseToMessage, type Message } from "@/types/Message";
@@ -38,6 +37,7 @@ export const useSyncStore = defineStore("background_sync", () => {
 
 	// Handle incoming WebSocket messages
 	socket.on("message", async (msg) => {
+		console.log(msg.type);
 		switch (msg.type) {
 			case "online_status":
 				// Update the user's online/offline status in local state
@@ -73,13 +73,13 @@ export const useSyncStore = defineStore("background_sync", () => {
 				break;
 
 			case "friend_request":
-				console.log("friend_request");
-				console.log(msg);
 				delete msg.last;
-
-				console.log(msg);
 				friendStore.friendRequests.push(msg);
 				break;
+
+			case "add_friend":
+				console.log(msg);
+				friendStore.addFriend(msg.freind_doc_id);
 		}
 	});
 

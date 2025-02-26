@@ -1,5 +1,3 @@
-import type { User } from "@/types/User";
-
 const DB_NAME = "bridge-db";
 const DB_VERSION = 1;
 
@@ -22,6 +20,9 @@ const STORES = [
 	{
 		name: "conversation",
 		indexes: [{ name: "participant", unique: true }],
+	},
+	{
+		name: "tempFile",
 	},
 ];
 
@@ -52,7 +53,7 @@ class IndexedDbService {
 							autoIncrement: false,
 						});
 
-						storeName.indexes.forEach((index) => {
+						storeName.indexes?.forEach((index) => {
 							if (!store.indexNames.contains(index.name)) {
 								store.createIndex(index.name, index.name, {
 									unique: index.unique,

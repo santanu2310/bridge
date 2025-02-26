@@ -33,6 +33,7 @@ export const useUserStore = defineStore("user", () => {
 		fullName: "",
 		email: "",
 		bio: "",
+		location: "",
 		profilePicUrl: "",
 		joinedDate: "",
 	});
@@ -52,6 +53,7 @@ export const useUserStore = defineStore("user", () => {
 				user.fullName = response.data.full_name;
 				user.email = response.data.email;
 				user.bio = response.data.bio;
+				user.location = response.data.location;
 				user.profilePicUrl = response.data.profile_picture;
 				user.joinedDate = response.data.created_at;
 			}

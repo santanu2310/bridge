@@ -100,21 +100,35 @@
 					<div
 						class="w-full h-0 px-8 overflow-hidden duration-200 max-h-screen"
 						:class="{
-							['!h-[150px]']: isVisible == 'p_info',
+							['!h-[280px]']: isVisible == 'p_info',
 						}"
 					>
 						<div class="w-full mt-2">
 							<EditableField
 								d_key="full_name"
-								:d_value="user.fullName"
+								:d_value="user.fullName || ''"
 								label="Display Name"
 							/>
 						</div>
 
 						<div class="w-full mt-2">
 							<NonEditableField
-								:d_value="user.email"
+								:d_value="user.email as string"
 								label="User Email"
+							/>
+						</div>
+						<div class="w-full mt-2">
+							<EditableField
+								d_key="bio"
+								:d_value="user.bio || ''"
+								label="Bio"
+							/>
+						</div>
+						<div class="w-full mt-2">
+							<EditableField
+								d_key="location"
+								:d_value="user.location || ''"
+								label="Location"
 							/>
 						</div>
 					</div>

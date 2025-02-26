@@ -12,11 +12,13 @@ from app.core.schemas import (
     FriendRequestDB,
     Friends_Status,
     FriendRequestOut,
+    AddFriendMessage,
 )
 
 from app.core.db import AsyncDatabase, get_async_database
 from app.api.user.services import get_full_user
 from app.deps import get_user_from_access_token_http
+from app.api.sync_socket.router import send_message
 
 from .services import (
     create_friends,
@@ -129,11 +131,16 @@ async def accept_friend_request(
             status_code=status.HTTP_404_NOT_FOUND, detail="No friend request found."
         )
 
-    friend = await create_friends(
-        db, user1_id=f_request["receiver_id"], user2_id=f_request["sender_id"]
+    friend_request = FriendRequestDB.model_validate(f_request)
+
+    friend1_id, friend2_id = await create_friends(
+        db, user1_id=friend_request.receiver_id, user2_id=friend_request.sender_id
     )
 
-    return friend
+    freind_message = AddFriendMessage(freind_doc_id=friend2_id)
+    await send_message(user_ids=[friend_request.sender_id], message_data=freind_message)
+
+    return {"friendship_document_id": str(friend1_id)}
 
 
 @router.patch("/reject-request/{request_id}")
@@ -157,16 +164,15 @@ async def list_friends(
     ),
     db: AsyncDatabase = Depends(get_async_database),
 ):
-    friends = await get_friends_list(db, user.id, updated_after)
-    friend_list = [UserOut(**user) for user in friends]
-
+    print(user)
+    friend_list = await get_friends_list(db, user.id, updated_after)
     return friend_list
 
 
 @router.get("/ger-friend/{id}")
 async def get_friend(
-    id: Annotated[str, Path(title="Id of the friend")],
+    id: Annotated[str, Path(title="Id of the friend document")],
     user: UserAuthOut = Depends(get_user_from_access_token_http),
     db: AsyncDatabase = Depends(get_async_database),
 ):
-    return await _get_friend(db=db, user_id=user.id, friend_id=ObjectId(id))
+    return await _get_friend(db=db, user_id=user.id, friend_object_id=ObjectId(id))

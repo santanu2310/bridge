@@ -20,14 +20,15 @@ from app.core.schemas import (
 from app.core.db import (
     AsyncDatabase,
     create_async_client,
-    AsyncIOMotorClient,
-    AsyncDatabase,
 )
 from app.api.msg_socket.services import get_user_form_conversation
 from app.api.user.services import get_full_user
 
 
-async def watch_user_updates(db: AsyncDatabase):
+async def watch_user_updates():
+    client = create_async_client()
+    db = AsyncDatabase(client, settings.DATABASE_NAME)
+
     async with db.user_profile.watch(
         pipeline=[{"$match": {"operationType": "update"}}]
     ) as stream:
@@ -55,7 +56,9 @@ async def watch_user_updates(db: AsyncDatabase):
                 print(f"Error processing user update : {e}")
 
 
-async def handle_online_status_update(db: AsyncDatabase):
+async def handle_online_status_update():
+    client = create_async_client()
+    db = AsyncDatabase(client, settings.DATABASE_NAME)
     while True:
         consumer = AIOKafkaConsumer(
             "online_status", bootstrap_servers=settings.KAFKA_CONNECTION
@@ -102,11 +105,13 @@ async def handle_online_status_update(db: AsyncDatabase):
             await asyncio.sleep(5)
 
 
-async def watch_message_updates(db: AsyncDatabase):
+async def watch_message_updates():
     """
     Watches for updates in the MessageCollection and sends message status updates
     to the sender when the message status changes.
     """
+    client = create_async_client()
+    db = AsyncDatabase(client, settings.DATABASE_NAME)
     async with db.message.watch(
         pipeline=[{"$match": {"operationType": "update"}}]
     ) as stream:
@@ -188,9 +193,9 @@ async def watch_friend_requests():
     Watches for updates in the MessageCollection and sends message status updates
     to the sender when the message status changes.
     """
+    # I don't think this task i really necessary message can be directly send from the router function
     client = create_async_client()
     db = AsyncDatabase(client, settings.DATABASE_NAME)
-    print("task created watch friend requests")
 
     try:
         async with db.friend_request.watch(
@@ -198,7 +203,6 @@ async def watch_friend_requests():
             full_document="updateLookup",
         ) as stream:
             async for change in stream:
-                print(change)
                 try:
                     friend_request = FriendRequestDB.model_validate(
                         change["fullDocument"]

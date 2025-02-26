@@ -1,10 +1,13 @@
+from pathlib import Path
 from celery import Celery  # type: ignore
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from aiokafka import AIOKafkaProducer  # type: ignore
 
+env_path = Path(__file__).parent.parent / ".env"
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file="/.env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(env_file=env_path, env_file_encoding="utf-8")
 
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7

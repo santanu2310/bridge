@@ -1,5 +1,6 @@
 import axios from "axios";
 import { defineStore } from "pinia";
+import { EventEmitter } from "events";
 import { indexedDbService } from "@/services/indexDbServices";
 import { Socket } from "@/services/socektServices";
 import {
@@ -9,6 +10,7 @@ import {
 	mapResponseToMessage,
 } from "@/types/Message";
 import type { Conversation } from "@/types/Conversation";
+import type { TempFile } from "@/types/Commons";
 import {
 	type MessageStatusUpdate,
 	MessageStatus,
@@ -27,6 +29,9 @@ export const useMessageStore = defineStore("message", () => {
 	const userStore = useUserStore();
 	const syncStore = useSyncStore();
 	const authStore = useAuthStore();
+
+	class UploadEmitter extends EventEmitter {}
+	const uploadEmitter = new UploadEmitter();
 
 	//handle receiving message
 	socket.on("message", async (msg) => {
@@ -82,19 +87,6 @@ export const useMessageStore = defineStore("message", () => {
 
 			await indexedDbService.addRecord("conversation", newConversation);
 		} else {
-			// For recent conversation
-			if (
-				userStore.currentConversation == null ||
-				userStore.currentConversation.convId != message.conversationId
-			) {
-				// conversation.unseenMessageIds!.push(message.id as string);
-			}
-			// Ongoing conversation
-			else {
-				// message.status = "read";
-				//TODO: A function to send server this information
-			}
-
 			// Update the last conversation datetime
 			userStore.conversations[message.conversationId!].lastMessageDate =
 				message.sendingTime as string;
@@ -108,6 +100,7 @@ export const useMessageStore = defineStore("message", () => {
 			if (msg.temp_id) {
 				await indexedDbService.deleteRecord("message", msg.temp_id);
 				deleteMessageFromList(message.conversationId!, msg.temp_id);
+				await indexedDbService.deleteRecord("tempFile", msg.temp_id);
 			}
 		} else {
 			// Send acknowledgement to server that the message is being received
@@ -209,41 +202,58 @@ export const useMessageStore = defineStore("message", () => {
 	}
 
 	async function sendMessageWithFile(
-		file: File,
-		message: string | null,
-		receiverId: string | null,
-		conversationId: string | null
+		message: Message,
+		file: File | null = null
 	) {
-		if (!conversationId) {
-			console.error("conversationId is required");
+		if (!message.conversationId && !message.receiverId) {
+			console.error("either receiverId or conversationId is required");
 			return;
 		}
+
 		try {
-			// Make the data ready for indexedDb and add it
-			const messageData: Message = {
-				id: crypto.randomUUID(),
-				senderId: userStore.user.id,
-				receiverId: receiverId,
-				conversationId: conversationId,
-				message: message,
-				attachment: {
+			// If no file is given try to get the file from indexedDB else add the file to the database
+			if (!file) {
+				const fileRequest = (await indexedDbService.getRecord(
+					"tempFile",
+					message.id
+				)) as TempFile | null;
+
+				if (!fileRequest) {
+					console.error("Couldnot get the file");
+					return;
+				}
+
+				file = fileRequest.file;
+			} else {
+				const tempFile: TempFile = {
+					id: message.id,
+					file: file,
+				};
+				await indexedDbService.addRecord("tempFile", tempFile);
+			}
+
+			if (!message.attachment) {
+				message.attachment = {
 					type: FileType.attachment,
 					name: file.name,
 					key: null,
 					tempFileId: null,
 					size: file.size,
-				},
-				sendingTime: new Date().toISOString(),
-				status: "pending",
-				receivedTime: null,
-				seenTime: null,
-			};
-			await indexedDbService.addRecord("message", messageData);
+				};
+			}
 
-			addMessageInState(messageData);
-			const response = await authStore.authAxios.get(
-				"messages/upload-url"
-			);
+			if (!(await indexedDbService.getRecord("message", message.id))) {
+				await indexedDbService.addRecord("message", message);
+				console.log("adding message in state");
+				addMessageInState(message);
+			}
+
+			uploadEmitter.emit("uploadPreprocessing", message.id);
+			const response = await authStore.authAxios({
+				method: "get",
+				url: "messages/upload-url",
+			});
+			console.log(response);
 
 			if (response.status === 200) {
 				response.data.fields["file"] = file;
@@ -255,21 +265,35 @@ export const useMessageStore = defineStore("message", () => {
 					},
 					url: response.data.url,
 					data: response.data.fields,
+					onUploadProgress(progressEvent) {
+						const percentCompleted = Math.round(
+							(progressEvent.loaded * 100) /
+								(progressEvent.total ?? file!.size)
+						);
+						uploadEmitter.emit(
+							"uploadProgress",
+							message.id,
+							percentCompleted
+						);
+						console.log(progressEvent.loaded);
+						console.log(percentCompleted);
+					},
 				});
 
 				console.log("status code : ", uploadResponse.status);
 
 				if (uploadResponse.status === 204) {
+					uploadEmitter.emit("uploadPostProcessing", message.id);
 					const fileData = {
 						temp_file_id: response.data.fields.key,
 						name: file.name,
 					};
 
 					const msg = {
-						message: message,
-						receiver_id: receiverId,
-						conversation_id: conversationId,
-						temp_id: messageData.id,
+						message: message.message,
+						receiver_id: message.receiverId,
+						conversation_id: message.conversationId,
+						temp_id: message.id,
 						attachment: fileData,
 					};
 
@@ -282,14 +306,18 @@ export const useMessageStore = defineStore("message", () => {
 					console.log(messageResponse);
 				}
 			}
-		} catch (error) {}
+		} catch (error) {
+			uploadEmitter.emit("uploadError", message.id);
+			console.error(error);
+		}
 	}
 
 	async function downloadFile(file: FileInfo) {
 		try {
-			const response = await authStore.authAxios.get(
-				`messages/download-url?key=${file.key}`
-			);
+			const response = await authStore.authAxios({
+				method: "get",
+				url: `messages/download-url?key=${file.key}`,
+			});
 
 			if (response.status === 200) {
 				const fetchResponse = await fetch(response.data);
@@ -320,5 +348,5 @@ export const useMessageStore = defineStore("message", () => {
 		}
 	}
 
-	return { sendMessage, sendMessageWithFile, downloadFile };
+	return { uploadEmitter, sendMessage, sendMessageWithFile, downloadFile };
 });
