@@ -110,14 +110,19 @@ async def watch_message_updates():
     Watches for updates in the MessageCollection and sends message status updates
     to the sender when the message status changes.
     """
+
     client = create_async_client()
     db = AsyncDatabase(client, settings.DATABASE_NAME)
+
     async with db.message.watch(
-        pipeline=[{"$match": {"operationType": "update"}}]
+        pipeline=[{"$match": {"operationType": "update"}}],
+        full_document="updateLookup",
     ) as stream:
         async for change in stream:
             try:
-                # Extract the required data from the event
+                if not change["updateDescription"]["updatedFields"]["status"]:
+                    continue
+
                 message_id = change["documentKey"]["_id"]
                 updated_field = change["updateDescription"]["updatedFields"]
                 status = change["updateDescription"]["updatedFields"]["status"]
@@ -126,7 +131,7 @@ async def watch_message_updates():
                 timestamp = next(iter(updated_field.values()))
 
                 # Fetch the updated message from the database
-                message_request = await db.message.find_one({"_id": message_id})
+                message = Message.model_validate(change["fullDocument"])
 
                 # Construct a MessageEvent Object
                 message_event = MessageEvent(
@@ -141,11 +146,11 @@ async def watch_message_updates():
 
                 # Send the status update to the message sender
                 await send_sync_message(
-                    user_ids=[message_request["sender_id"]], message_data=sync_message
+                    user_ids=[message.sender_id], message_data=sync_message
                 )
 
             except Exception as e:
-                print(f"Error processing user update : {e}")
+                print(f"Error processing user update(line:147) : {e}")
 
 
 async def distribute_published_messages():
@@ -156,6 +161,8 @@ async def distribute_published_messages():
 
         try:
             await consumer.start()
+            client = create_async_client()
+            db = AsyncDatabase(client, settings.DATABASE_NAME)
 
             # Asyncronous Loop for iterating over the available messages
             async for msg in consumer:
@@ -171,7 +178,7 @@ async def distribute_published_messages():
 
                 # Getting the receiver's ID
                 receiver_id = await get_user_form_conversation(
-                    message.conversation_id, message.sender_id
+                    db, message.conversation_id, message.sender_id
                 )
 
                 # Sending the message to receiver
