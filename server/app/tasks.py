@@ -14,7 +14,6 @@ celery_app = create_celery_client()
 
 @celery_app.task
 def process_media_message(message_id: str):
-    print("started the task...")
     with create_sync_client() as sync_client:
         db = SyncDatabase(sync_client, settings.DATABASE_NAME)
         try:
@@ -67,6 +66,14 @@ def process_media_message(message_id: str):
             db.message.update_one(
                 {"_id": message.id},
                 {"$set": {"attachment": message.attachment.model_dump()}},
+            )
+
+            # Update the conversation last_message_date
+            db.conversation.find_one_and_update(
+                {"_id": message.conversation_id},
+                {
+                    "$set": {"last_message_date": message.sending_time},
+                },
             )
 
             # Publish the message to kafak
