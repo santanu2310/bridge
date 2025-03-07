@@ -1,12 +1,10 @@
 import os
-
-# import jwt
-# from bson import ObjectId
-# from datetime import datetime, timedelta, timezone
-# from typing import Optional
-# from fastapi import HTTPException, status, WebSocketException
+import uuid
 from passlib.context import CryptContext  # type: ignore
 from aiokafka import AIOKafkaProducer  # type: ignore
+import boto3  # type: ignore
+from botocore.client import Config  # type: ignore
+from botocore.exceptions import ClientError  # type: ignore
 
 from app.core.schemas import (
     Message,
@@ -28,140 +26,6 @@ def hash_password(password: str, salt: str) -> str:
 
 def verify_password(password_hash: str, password_plain: str, salt: str):
     return pwd_context.verify(password_plain + salt, password_hash)
-
-
-# def create_access_token(data: dict, expire_delta: timedelta | None = None):
-#     to_encode = data.copy()
-
-#     if expire_delta:
-#         expire = datetime.now(timezone.utc) + expire_delta
-#     else:
-#         expire = datetime.now(timezone.utc) + timedelta(hours=3)
-
-#     to_encode.update({"exp": expire})
-
-#     encoded_jwt = jwt.encode(to_encode, key=JWT_ACCESS_SECRET_KEY, algorithm=ALGORITHM)
-#     return encoded_jwt
-
-
-# def create_refresh_token(data: dict, expire_delta: timedelta | None = None):
-#     to_encode = data.copy()
-
-#     if expire_delta:
-#         expire = datetime.now(timezone.utc) + expire_delta
-#     else:
-#         expire = datetime.now(timezone.utc) + timedelta(days=7)
-
-#     to_encode.update({"exp": expire})
-#     encoded_jwt = jwt.encode(to_encode, key=JWT_REFRESH_SECRET_KEY, algorithm=ALGORITHM)
-#     print(encoded_jwt)
-#     return encoded_jwt
-
-
-# async def create_friends(user1_id: ObjectId, user2_id: ObjectId):
-#     friend_for_1 = Friends(user_id=user1_id, friends_id=user2_id)
-#     friend_for_2 = Friends(user_id=user2_id, friends_id=user1_id)
-
-#     # TODO: check if the users are already friend
-
-#     friend1 = await FriendCollection.insert_one(friend_for_1.model_dump(exclude=["id"]))
-#     friend2 = await FriendCollection.insert_one(friend_for_2.model_dump(exclude=["id"]))
-
-#     return friend1
-
-
-# async def is_friends():
-#     pass
-
-
-# async def get_friends_list(id: ObjectId, updated_after: Optional[datetime] = None):
-#     # Pipeline to get users from user_id in friends collection
-#     pipeline = [
-#         {"$match": {"user_id": id}},
-#         {"$addFields": {"friendsObjectId": {"$toObjectId": "$friends_id"}}},
-#         {
-#             "$lookup": {
-#                 "from": "users",
-#                 "localField": "friendsObjectId",
-#                 "foreignField": "_id",
-#                 "as": "friend",
-#             }
-#         },
-#         {"$sort": {"friend.firstname": 1}},
-#         {"$unwind": "$friend"},
-#         {"$replaceRoot": {"newRoot": "$friend"}},
-#     ]
-
-#     if updated_after:
-#         pipeline[0]["$match"]["last_message_date"] = {"$gt": updated_after}
-
-#     try:
-#         cursor = FriendCollection.aggregate(pipeline)
-#         friends = await cursor.to_list(length=None)
-
-#         return friends
-
-#     except Exception as e:
-#         raise HTTPException(
-#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-#             detail="error fetching users list",
-#         )
-
-
-# async def get_user_form_conversation(conv_id: ObjectId, user_id: ObjectId):
-#     try:
-#         conversation = await ConversationCollection.find_one({"_id": conv_id})
-
-#         if not conversation:
-#             raise WebSocketException(
-#                 code=status.WS_1007_INVALID_FRAME_PAYLOAD_DATA,
-#                 reason="Invalid conversation id",
-#             )
-
-#         if user_id not in conversation["participants"]:
-#             raise WebSocketException(
-#                 code=status.WS_1007_INVALID_FRAME_PAYLOAD_DATA,
-#                 reason="User not a participant in the conversation",
-#             )
-
-#         return next(id for id in conversation["participants"] if id != user_id)
-
-#     except Exception as e:
-#         print(e)
-#         raise WebSocketException(
-#             code=status.WS_1011_INTERNAL_ERROR, reason="Internal server error"
-#         )
-
-
-# async def get_or_create_conversation(user_id: ObjectId, friend_id: ObjectId):
-#     # check if the users are friend or not
-#     friend = await FriendCollection.find_one(
-#         {"user_id": user_id, "friends_id": friend_id}
-#     )
-
-#     if not friend:
-#         raise WebSocketException(
-#             code=status.WS_1003_UNSUPPORTED_DATA, reason="Invalid reciever id"
-#         )
-
-#     # check if conversations between the user exist
-#     conversation = await ConversationCollection.find_one(
-#         {"participants": {"$all": [user_id, friend_id]}}
-#     )
-
-#     if conversation:
-#         # Return the conversation Id
-#         return conversation["_id"]
-
-#     else:
-#         # create a new conversation document
-#         conv_data = Conversation(participants=[user_id, friend_id])
-#         conversation_resp = await ConversationCollection.insert_one(
-#             conv_data.model_dump(exclude=["id"])
-#         )
-
-#         # Return the conversation Id
-#         return str(conversation_resp)
 
 
 def get_file_extension(filename: str) -> str:
@@ -197,3 +61,35 @@ async def publish_user_message(message: Message):
     except Exception as e:
         await producer.stop()
         print("Unable to publish message to kafka : ", e)
+
+
+def create_presigned_upload_url():
+    conditions = [
+        ["content-length-range", 0, 20971520],  # 20 MB limit
+    ]
+
+    unique_id = str(uuid.uuid4())
+
+    # Generate a presigned S3 POST URL
+    s3_client = boto3.client(
+        "s3",
+        aws_access_key_id=settings.AWS_ACCESS_KEY,
+        aws_secret_access_key=settings.AWS_SECRET_KEY,
+        region_name="ap-south-1",
+        config=Config(signature_version="s3v4"),
+    )
+
+    try:
+        response = s3_client.generate_presigned_post(
+            settings.BUCKET_NAME,
+            f"temp/{unique_id}",
+            Conditions=conditions,
+            ExpiresIn=360,
+        )
+
+    except ClientError as e:
+        print(f"{e=}")
+        return None
+
+    # The response contains the presigned URL and required fields
+    return response

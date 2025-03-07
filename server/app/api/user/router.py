@@ -4,8 +4,16 @@ from fastapi import APIRouter, Body, HTTPException, status, Depends
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 
-from app.core.schemas import UserRegistration, UserOut, UpdatebleUser, UserAuthOut
-from app.utils import verify_password
+from app.core.schemas import (
+    UserRegistration,
+    UserOut,
+    UpdatableUserText,
+    UserAuthOut,
+    UpdatableUserImages,
+    MediaType,
+)
+from app.utils import verify_password, create_presigned_upload_url
+from app.tasks import process_profile_media
 
 from app.deps import get_user_from_refresh_token, get_user_from_access_token_http
 from app.core.db import get_async_database, AsyncDatabase
@@ -97,7 +105,6 @@ async def get_me(
 
 @router.post("/refresh-token")
 async def get_refresh_token(user: UserAuthOut = Depends(get_user_from_refresh_token)):
-    print(user)
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": str(user.id)}, expire_delta=access_token_expires
@@ -133,9 +140,41 @@ async def get_refresh_token(user: UserAuthOut = Depends(get_user_from_refresh_to
 
 @router.patch("/update")
 async def update_user_data(
-    data: Annotated[UpdatebleUser, Body()],
+    data: Annotated[UpdatableUserText, Body()],
     user: UserAuthOut = Depends(get_user_from_access_token_http),
     db: AsyncDatabase = Depends(get_async_database),
 ):
-    print(data)
     return await update_user_profile(db, data, user.id)
+
+
+@router.get("/upload-url")
+async def ger_presigned_post(
+    user: UserAuthOut = Depends(get_user_from_access_token_http),
+):
+    return create_presigned_upload_url()
+
+
+@router.post("/add-profile-image")
+async def add_user_image(
+    data: Annotated[UpdatableUserImages, Body()],
+    user: UserAuthOut = Depends(get_user_from_access_token_http),
+):
+    if data.profile_picture_id is None and data.banner_picture_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Nither profile_picture_id not banner_picture_id is provided",
+        )
+
+    if data.profile_picture_id:
+        process_profile_media.delay(
+            data.profile_picture_id, str(user.id), MediaType.profile_picture.value
+        )
+    # else:
+    #     process_profile_media.delay(
+    #         data.profile_picture_id, str(user.id), MediaType.banner_picture.value
+    #     )
+
+    return JSONResponse(
+        {"message": "Profile picture is being processed"},
+        status_code=status.HTTP_202_ACCEPTED,
+    )
