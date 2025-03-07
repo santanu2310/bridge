@@ -16,4 +16,5 @@ RUN --mount=type=bind,source=uv.lock,target=uv.lock \
     && apt-get autoremove -y build-essential
 
 
-CMD ["uv", "run", "celery", "-A", "app.tasks", "worker", "--loglevel=INFO"]
+# CMD ["uv", "run", "celery", "-A", "app.tasks", "worker", "--loglevel=INFO"]
+CMD ["uv", "run", "watchfiles", "uv run celery -A app.tasks worker --loglevel=INFO"]

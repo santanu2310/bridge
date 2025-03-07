@@ -19,9 +19,12 @@ services:
             - ./scripts:/scripts
         entrypoint: ["/scripts/setup.sh"]
         depends_on:
-            - mongo1
-            - mongo2
-            - mongo3
+            mongo1:
+                condition: service_healthy
+            mongo2:
+                condition: service_healthy
+            mongo3:
+                condition: service_healthy
 
     mongo1:
         hostname: mongo1
@@ -43,6 +46,13 @@ services:
                 "--oplogSize",
                 "128",
             ]
+        healthcheck:
+            test: ["CMD", "mongosh", "--eval", "'db.runCommand({ ping: 1 })'"]
+            interval: 20s
+            timeout: 15s
+            retries: 5
+            start_period: 10s
+
         volumes:
             - ./mongodb/mongo/data1/db:/data/db
             # - ./mongodb/mongo/data1/configdb:/data/configdb
@@ -66,6 +76,13 @@ services:
                 "--oplogSize",
                 "128",
             ]
+        healthcheck:
+            test: ["CMD", "mongosh", "--eval", "'db.runCommand({ ping: 1 })'"]
+            interval: 20s
+            timeout: 15s
+            retries: 5
+            start_period: 10s
+
         volumes:
             - ./mongodb/mongo/data2/db:/data/db
             # - ./mongodb/mongo/data2/configdb:/data/configdb
@@ -89,6 +106,13 @@ services:
                 "--oplogSize",
                 "128",
             ]
+        healthcheck:
+            test: ["CMD", "mongosh", "--eval", "'db.runCommand({ ping: 1 })'"]
+            interval: 20s
+            timeout: 15s
+            retries: 5
+            start_period: 10s
+
         volumes:
             - ./mongodb/mongo/data3/db:/data/db
             # - ./mongodb/mongo/data3/configdb:/data/configdb
@@ -119,6 +143,9 @@ services:
             context: ../server
             dockerfile: ./Dockerfile.celery
 
+        volumes:
+            - ../server/app:/server/app
+
         depends_on:
             - redis
 
@@ -147,6 +174,9 @@ services:
                 "/server/app",
             ]
         depends_on:
-            - redis
-            - mongo-setup
-            - kafka
+            kafka:
+                condition: service_started
+            mongo-setup:
+                condition: service_completed_successfully
+            celery:
+                condition: service_started

@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
 
     # Kafka
-    KAFKA_CONNECTION: str = "localhost:9092"
+    KAFKA_CONNECTION: str = "kafka:9092"
 
     # AWS
     AWS_ACCESS_KEY: str = ""
@@ -26,12 +26,10 @@ class Settings(BaseSettings):
     BUCKET_NAME: str = ""
 
     # Mongodb
-    MONGOD_URL: str = (
-        "mongodb://127.0.0.1:27017,localhost:27018,localhost:27019/?replicaSet=rs0"
-    )
+    MONGOD_URL: str = "mongodb://mongo1:27017,mongo2:27017,mongo3:27017/?replicaSet=rs0"
     DATABASE_NAME: str = "bridge"
 
-    CELERY_BROKER_URL: str = "redis://localhost:6379"
+    CELERY_BROKER_URL: str = "redis://redis:6379"
 
 
 settings = Settings()
