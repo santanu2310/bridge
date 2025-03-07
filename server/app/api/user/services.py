@@ -11,7 +11,7 @@ from app.core.schemas import (
     UserProfile,
     UserAuth,
     UserRegistration,
-    UpdatebleUser,
+    UpdatableUserText,
     UserOut,
 )
 from app.core.config import settings
@@ -35,8 +35,6 @@ async def create_user(db: AsyncDatabase, user: UserRegistration):
 
     # Create the user data using your UserAuth Pydantic model
     user_data = UserAuth.model_validate(raw_user_data)
-
-    print(user_data.model_dump())
 
     created = await db.user_auth.insert_one(user_data.model_dump(exclude={"id"}))
 
@@ -74,10 +72,9 @@ async def get_full_user(db: AsyncDatabase, user_id: ObjectId) -> UserOut:
 
 
 async def update_user_profile(
-    db: AsyncDatabase, data: UpdatebleUser, user_id: ObjectId
+    db: AsyncDatabase, data: UpdatableUserText, user_id: ObjectId
 ):
     cleaned_data = data.model_dump(exclude_none=True, exclude={"created_at"})
-    print(f"{cleaned_data=}")
     if not cleaned_data:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="No data to update"
@@ -88,8 +85,6 @@ async def update_user_profile(
         update={"$set": cleaned_data},
         return_document=ReturnDocument.AFTER,
     )
-
-    print(f"{user_data=}")
 
     if not user_data:
         raise HTTPException(

@@ -68,6 +68,11 @@ class FileType(str, Enum):
     attachment = "attachment"
 
 
+class MediaType(str, Enum):
+    profile_picture = "profile_picture"
+    banner_picture = "banner_picture"
+
+
 class UserAuth(BaseModel):
     id: Optional[PyObjectId] = Field(validation_alias="_id", default=None)
     username: str
@@ -122,12 +127,15 @@ class UserOut(BaseModel):
     created_at: datetime | None = None
 
 
-class UpdatebleUser(BaseModel):
+class UpdatableUserText(BaseModel):
     full_name: str | None = None
-    bio: str | None = None
-    profile_picture: str | None = None
-    banner_picture: Optional[FileUrl] = None
+    bio: str | None = Field(max_length=100, default=None)
     location: str | None = None
+
+
+class UpdatableUserImages(BaseModel):
+    profile_picture_id: Optional[str] = None
+    banner_picture_id: Optional[str] = None
 
 
 class Friends(BaseModel):
@@ -172,7 +180,7 @@ class Conversation(BaseModel):
 
 class FileInfo(BaseModel):
     type: FileType
-    name: Optional[str] = None
+    name: str
     key: Optional[str] = None
     temp_file_id: Optional[str] = None
     size: Optional[int] = None
