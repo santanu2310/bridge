@@ -105,7 +105,7 @@ def process_profile_media(file_id: str, user_id: str, media_type: MediaType):
             # Getting the image from S3
             obj = s3_client.get_object(
                 Bucket=settings.BUCKET_NAME,
-                Key="temp/wallpaperflare.com_wallpaper(1).jpg",
+                Key=file_id,
             )
             image_data = obj["Body"].read()
 
