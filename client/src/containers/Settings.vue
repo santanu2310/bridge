@@ -3,17 +3,77 @@
 	import IconPencil from "@/components/icons/IconPencil.vue";
 	import EditableField from "@/components/EditableField.vue";
 	import NonEditableField from "@/components/NonEditableField.vue";
+	import EditProfilePicture from "@/components/EditProfilePicture.vue";
 
 	import { useUserStore } from "@/stores/user";
+	import { useAuthStore } from "@/stores/auth";
+	import IconCamera from "@/components/icons/IconCamera.vue";
 
 	const userStore = useUserStore();
+	const authStore = useAuthStore();
 
 	const user = ref(userStore.user);
+
+	const profileInputReference = ref<HTMLInputElement | null>(null);
+	const editProfilePopup = ref(false);
 
 	const isVisible = ref<string | null>("p_info");
 	function changeVisibility(v_value: string) {
 		isVisible.value = isVisible.value != v_value ? v_value : null;
 	}
+
+	const uploadProfilePic = async (file: File) => {
+		// const file = profileInputReference.value?.files![0];
+		if (file) {
+			if (file.size > 10 * 1024 * 1024) {
+				alert("File size exceeds 10MB. Please select a smaller file.");
+				profileInputReference.value = null;
+			} else {
+				// Get the upload url and other metadata
+				const response = await authStore.authAxios({
+					method: "get",
+					url: "users/upload-url",
+				});
+				console.log(response);
+
+				if (response.status === 200) {
+					console.log(file);
+					response.data.fields["file"] = file;
+
+					// Upload the file to aws
+					const uploadResponse = await authStore.publicAxios({
+						method: "post",
+						headers: {
+							"Content-Type": "multipart/form-data",
+						},
+						url: response.data.url,
+						data: response.data.fields,
+					});
+
+					console.log("status code : ", uploadResponse.status);
+
+					if (uploadResponse.status === 204) {
+						const profile_data = {
+							profile_picture_id: response.data.fields.key,
+						};
+
+						const messageResponse = await authStore.authAxios({
+							method: "post",
+							url: "users/add-profile-image",
+							data: profile_data,
+						});
+
+						console.log(messageResponse);
+					}
+				}
+			}
+		}
+	};
+
+	const onClose = () => {
+		profileInputReference.value = null;
+		editProfilePopup.value = false;
+	};
 </script>
 
 <template>
@@ -39,13 +99,41 @@
 				</div>
 				<div
 					class="w-2/5 aspect-auto absolute left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full overflow-hidden"
-					style=""
 				>
-					<img
-						class="w-full h-full object-cover"
-						src="https://doot-dark.react.themesbrand.com/static/media/avatar-1.9c8e605558cece65b06c.jpg"
-						alt=""
-					/>
+					<div class="w-full h-full relative">
+						<label
+							for="profilepic"
+							class="w-full h-full flex flex-col items-center justify-center absolute top-0 left-0 bg-slate-900 bg-opacity-70 text-sm text-center delay-300 hover:z-10"
+						>
+							<div class="w-1/6 h-auto aspect-square">
+								<IconCamera :size="90" />
+							</div>
+							UPLOAD PROFILE PICTURE
+						</label>
+						<input
+							type="file"
+							name="profilepic"
+							id="profilepic"
+							hidden
+							ref="profileInputReference"
+							max="20971520"
+							accept="image/*"
+							@change="editProfilePopup = true"
+						/>
+						<img
+							class="w-full h-full object-cover relative delay-300 hover:-z-10"
+							src="https://doot-dark.react.themesbrand.com/static/media/avatar-1.9c8e605558cece65b06c.jpg"
+							alt=""
+						/>
+					</div>
+					<Teleport to="body">
+						<EditProfilePicture
+							v-if="editProfilePopup"
+							:file="profileInputReference?.files![0]"
+							@close="onClose"
+							@modifiedFile="uploadProfilePic"
+						/>
+					</Teleport>
 				</div>
 			</div>
 			<div class="w-full mt-2 mb-10 flex flex-col items-center">
